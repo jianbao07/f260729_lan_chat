@@ -1,0 +1,117 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:yf_code/enum/RawMessageType.dart';
+import 'package:yf_code/bean/BeatBean.dart';
+import 'package:yf_code/bean/DeviceBean.dart';
+import 'package:yf_code/model/DeviceModel.dart';
+import 'package:yf_code/InitManager.dart';
+import 'package:yf_code/utils/NetworkUtils.dart';
+import 'package:yf_code/utils/log.dart';
+
+class OnlineDeviceManager {
+  OnlineDeviceManager._();
+  static const int _LISTENER_PORT = 54832;
+
+  static Timer? _beatTimer;
+  static RawDatagramSocket? _beatSocket;
+  static RawDatagramSocket? _listenerSocket;
+  static String? _myIP;
+  static Map<String,DeviceBean> _deviceList={};
+
+  static void onBeat(BeatBean b,String address,int port){
+    final key="$address";
+    final d=_deviceList[key];
+    if(d==null){
+      _deviceList[key]=DeviceBean(
+        name: b.name,
+        ipAddress: address,
+        port: port,
+        updateTimestampUtc: b.timestampUtc,
+        deviceId: b.deviceId,
+      );
+    }else{
+      _deviceList[key]=d.copyWith(
+        name: b.name,
+        ipAddress: address,
+        port: port,
+        updateTimestampUtc: b.timestampUtc,
+        deviceId: b.deviceId,
+      );
+    }
+    updateList();
+  }
+
+  static void updateList(){
+    DeviceModel.instance.setDeviceList(_deviceList.values.toList());
+  }
+
+  static void startBeat() async {
+    _myIP=await NetworkUtils.getWifiIP();
+    final broadcastAddress = await NetworkUtils.getBroadcastAddress();
+    dLog("ip地址=$_myIP,广播地址=$broadcastAddress");
+    if (broadcastAddress == null) return;
+
+    _beatTimer?.cancel();
+    _beatSocket?.close();
+
+    final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+    socket.broadcastEnabled = true;
+    _beatSocket = socket;
+
+    void sendBeat() async{
+      final now=DateTime.now();
+      dLog("自心跳-${_myIP}-${now.toLocal()}");
+      final b=BeatBean(name: InitManager.deviceName??_myIP,type: RawMessageType.beat.code,timestampUtc: now.toUtc().millisecondsSinceEpoch,deviceId: InitManager.deviceId);
+      final payload = jsonEncode(b.toJson());
+      socket.send(
+        utf8.encode(payload),
+        InternetAddress(broadcastAddress),
+        _LISTENER_PORT,
+      );
+    }
+
+    sendBeat();
+    _beatTimer = Timer.periodic(const Duration(seconds: 5), (_) => sendBeat());
+  }
+
+  static void listenerBeat() async {
+    _listenerSocket?.close();
+
+    final socket = await RawDatagramSocket.bind(
+      InternetAddress.anyIPv4,
+      _LISTENER_PORT,
+      reuseAddress: true,
+    );
+    socket.broadcastEnabled = true;
+    _listenerSocket = socket;
+    dLog("开始监听心跳端口=$_LISTENER_PORT");
+
+    socket.listen((event) {
+      if (event != RawSocketEvent.read) return;
+      final datagram = socket.receive();
+      if (datagram == null) return;
+      final ip=datagram.address.address;
+      final port=datagram.port;
+      if(ip==_myIP){
+        dLog("收到自己的心跳");
+        return;
+      }
+
+      try {
+        final text = utf8.decode(datagram.data);
+        final json = jsonDecode(text) as Map<String, dynamic>;
+        final b=BeatBean.fromJson(json);
+        onBeat(b,ip,port);
+        final time=DateTime.fromMillisecondsSinceEpoch(b.timestampUtc?.toInt()??0,isUtc: true);
+        dLog(
+          "收到心跳 from=${ip}:${port} "
+          "name=${b.name} time=${time.toLocal()}",
+        );
+      } catch (e) {
+        dLog("心跳解析失败 from=${datagram.address.address}: $e");
+      }
+    });
+  }
+}

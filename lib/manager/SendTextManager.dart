@@ -22,12 +22,12 @@ class SendTextManager {
       return;
     }
     final payload = jsonEncode(message.toJson());
-    final data = utf8.encode(payload);
-    if(data.lengthInBytes>5120){
+    final payloadUint8 = utf8.encode(payload);
+    if(payloadUint8.lengthInBytes>5120){
       iLog("大小超过5KB，不允许通过text发送，请使用文件发送");
       return;
     }
-    TextTcpManager.sendText(data, ip);
+    TextTcpManager.sendText(payload,payloadUint8, ip);
     if(!resend){
       MessageManager.onMessageSent(message,ip,deviceId);
     }
@@ -62,7 +62,8 @@ class SendTextManager {
 
   static Future<void> _sendAckMessage(String ip,String? fromMessageId)async{
     final ack=RawAckBean(fromMessageId:fromMessageId,);
-    final data = utf8.encode(jsonEncode(ack.toJson()));
-    TextTcpManager.sendText(data, ip);
+    final payload=jsonEncode(ack.toJson());
+    final payloadUint8 = utf8.encode(payload);
+    TextTcpManager.sendText(payload,payloadUint8, ip);
   }
 }

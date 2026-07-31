@@ -25,12 +25,13 @@ class TextTcpManager {
   }
 
   /// 先发送 4 字节无符号整数（大端）告知 payload 大小，再发送 UTF-8 正文。
-  static Future<Result<void>> sendText(Uint8List data, String ip) async {
+  static Future<Result<void>> sendText(String payload,Uint8List payloadUint8, String ip) async {
     try {
+      iLog("发送文本消息 ${payload}");
       final socket = await _getOrCreateConnect(ip);
-      final header = ByteData(4)..setUint32(0, data.lengthInBytes);
+      final header = ByteData(4)..setUint32(0, payloadUint8.lengthInBytes);
       socket.add(header.buffer.asUint8List());
-      socket.add(data);
+      socket.add(payloadUint8);
       await socket.flush();
       return Result.success();
     } catch (e) {

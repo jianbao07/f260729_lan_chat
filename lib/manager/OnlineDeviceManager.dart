@@ -7,6 +7,7 @@ import 'package:yf_code/bean/BeatBean.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
 import 'package:yf_code/model/DeviceModel.dart';
 import 'package:yf_code/InitManager.dart';
+import 'package:yf_code/utils/MulticastLock.dart';
 import 'package:yf_code/utils/NetworkUtils.dart';
 import 'package:yf_code/utils/log.dart';
 
@@ -20,13 +21,13 @@ class OnlineDeviceManager {
   static String? _myIP;
   static Map<String,DeviceBean> _deviceList={};
 
-  static void onBeat(BeatBean b,String address,int port){
-    final key="$address";
+  static void onBeat(BeatBean b,String ip,int port){
+    final key=b.deviceId??ip;
     final d=_deviceList[key];
     if(d==null){
       _deviceList[key]=DeviceBean(
         name: b.name,
-        ipAddress: address,
+        ipAddress: ip,
         port: port,
         updateTimestampUtc: b.timestampUtc,
         deviceId: b.deviceId,
@@ -34,7 +35,7 @@ class OnlineDeviceManager {
     }else{
       _deviceList[key]=d.copyWith(
         name: b.name,
-        ipAddress: address,
+        ipAddress: ip,
         port: port,
         updateTimestampUtc: b.timestampUtc,
         deviceId: b.deviceId,
@@ -50,7 +51,7 @@ class OnlineDeviceManager {
   static void startBeat() async {
     _myIP=await NetworkUtils.getWifiIP();
     final broadcastAddress = await NetworkUtils.getBroadcastAddress();
-    dLog("ip地址=$_myIP,广播地址=$broadcastAddress");
+    iLog("启动心跳,ip地址=$_myIP,广播地址=$broadcastAddress");
     if (broadcastAddress == null) return;
 
     _beatTimer?.cancel();
@@ -79,6 +80,11 @@ class OnlineDeviceManager {
   static void listenerBeat() async {
     _listenerSocket?.close();
 
+    final locked = await MulticastLock.acquire();
+    if (!locked) {
+      iLog("MulticastLock 获取失败，UDP广播可能无法接收");
+    }
+
     final socket = await RawDatagramSocket.bind(
       InternetAddress.anyIPv4,
       _LISTENER_PORT,
@@ -86,7 +92,7 @@ class OnlineDeviceManager {
     );
     socket.broadcastEnabled = true;
     _listenerSocket = socket;
-    dLog("开始监听心跳端口=$_LISTENER_PORT");
+    iLog("开始监听心跳端口=$_LISTENER_PORT");
 
     socket.listen((event) {
       if (event != RawSocketEvent.read) return;

@@ -48,7 +48,7 @@ class TextTcpManager {
       shared: true,
     );
     _serverSocket = server;
-    iLog("开始监听消息端口(TCP)=$_MESSAGE_PORT");
+    iLog("开始监听文本消息=$_MESSAGE_PORT");
     server.listen((client) {
       final ip = client.remoteAddress.address;
       _putConnect(ip, client);
@@ -79,7 +79,7 @@ class TextTcpManager {
           buffer = buffer.sublist(expectedLength!);
           expectedLength = null;
           final text = utf8.decode(payload);
-          iLog("收到消息 from=$ip:$port text=$text");
+          iLog("收到文本消息 from=$ip:$port text=$text");
           SendTextManager.onTextMessage(text, ip);
         }
       },

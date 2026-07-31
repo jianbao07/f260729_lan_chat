@@ -42,21 +42,21 @@ class SendTextManager {
       switch (type) {
         case MessageType.text:
           final msg = TextMessageBean.fromJson(json);
-          iLog("收到文本消息 from=$ip text=${msg.text} fromDeviceId=${msg.base?.fromDeviceId}");
+          iLog("文本消息解析成功=${msg.text}");
           MessageManager.onMessageReceived(msg);
           _sendAckMessage(ip,msg.base?.fromMessageId);
           break;
         case MessageType.rawAck:
           final msg = RawAckBean.fromJson(json);
-          iLog("收到ack消息 from=$ip fromMessageId=${msg.fromMessageId}");
+          iLog("文本消息解析成功 ACK");
           MessageManager.onAck(msg);
           break;
         case null:
-          iLog("未知消息类型 from=$ip raw=$text");
+          iLog("文本消息解析失败 from=$ip raw=$text");
           break;
       }
     } catch (e) {
-      iLog("消息解析失败 from=$ip: $e");
+      iLog("文本消息解析异常 from=$ip: $e");
     }
   }
 

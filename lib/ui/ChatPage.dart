@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:yf_code/InitManager.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
-import 'package:yf_code/bean/message/BaseMessageBean.dart';
-import 'package:yf_code/bean/message/TextMessageBean.dart';
+import 'package:yf_code/bean/BaseMessageBean.dart';
+import 'package:yf_code/bean/TextMessageBean.dart';
 import 'package:yf_code/enum/MessageStateType.dart';
 import 'package:yf_code/manager/MessageManager.dart';
-import 'package:yf_code/manager/SendTextManager.dart';
+import 'package:yf_code/manager/SendMessageManager.dart';
 import 'package:yf_code/model/MessageModel.dart';
 import 'package:yf_code/utils/page.dart';
 
@@ -89,7 +89,7 @@ class _ChatPageState extends State<ChatPage> {
       _controller.clear();
     });
 
-    await SendTextManager.sendMessage(msg, _peerIp, _peerDeviceId);
+    await SendMessageManager.sendMessage(msg, _peerIp, _peerDeviceId);
 
     if (!mounted) return;
     setState(() {

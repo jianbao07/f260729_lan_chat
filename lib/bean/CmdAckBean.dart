@@ -3,11 +3,11 @@ import 'package:yf_code/enum/MessageType.dart';
 /// type : "ack"
 /// from_message_id : "3"
 
-class RawAckBean {
-  RawAckBean({
+class CmdAckBean {
+  CmdAckBean({
       this.fromMessageId});
 
-  RawAckBean.fromJson(dynamic json) {
+  CmdAckBean.fromJson(dynamic json) {
     fromMessageId = json['from_message_id']?.toString();
   }
   final String type = MessageType.rawAck.code;

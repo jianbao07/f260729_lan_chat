@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:yf_code/enum/RawMessageType.dart';
-import 'package:yf_code/bean/BeatBean.dart';
+import 'package:yf_code/bean/CmdBeatBean.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
 import 'package:yf_code/model/DeviceModel.dart';
 import 'package:yf_code/InitManager.dart';
@@ -21,7 +21,7 @@ class OnlineDeviceManager {
   static String? _myIP;
   static Map<String,DeviceBean> _deviceList={};
 
-  static void onBeat(BeatBean b,String ip,int port){
+  static void onBeat(CmdBeatBean b,String ip,int port){
     final key=b.deviceId??ip;
     final d=_deviceList[key];
     if(d==null){
@@ -64,7 +64,7 @@ class OnlineDeviceManager {
     void sendBeat() async{
       final now=DateTime.now();
       dLog("自心跳-${_myIP}-${now.toLocal()}");
-      final b=BeatBean(name: InitManager.deviceName??_myIP,type: RawMessageType.beat.code,timestampUtc: now.toUtc().millisecondsSinceEpoch,deviceId: InitManager.deviceId);
+      final b=CmdBeatBean(name: InitManager.deviceName??_myIP,type: RawMessageType.beat.code,timestampUtc: now.toUtc().millisecondsSinceEpoch,deviceId: InitManager.deviceId);
       final payload = jsonEncode(b.toJson());
       socket.send(
         utf8.encode(payload),
@@ -108,7 +108,7 @@ class OnlineDeviceManager {
       try {
         final text = utf8.decode(datagram.data);
         final json = jsonDecode(text) as Map<String, dynamic>;
-        final b=BeatBean.fromJson(json);
+        final b=CmdBeatBean.fromJson(json);
         onBeat(b,ip,port);
         final time=DateTime.fromMillisecondsSinceEpoch(b.timestampUtc?.toInt()??0,isUtc: true);
         dLog(

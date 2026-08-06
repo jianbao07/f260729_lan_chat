@@ -1,10 +1,11 @@
 import 'dart:async';
 
 import 'package:yf_code/InitManager.dart';
-import 'package:yf_code/bean/RawAckBean.dart';
-import 'package:yf_code/bean/message/BaseMessageBean.dart';
+import 'package:yf_code/bean/CmdAckBean.dart';
+import 'package:yf_code/bean/CmdFileBean.dart';
+import 'package:yf_code/bean/BaseMessageBean.dart';
 import 'package:yf_code/enum/MessageStateType.dart';
-import 'package:yf_code/manager/SendTextManager.dart';
+import 'package:yf_code/manager/SendMessageManager.dart';
 import 'package:yf_code/model/MessageModel.dart';
 
 class MessageManager {
@@ -49,7 +50,7 @@ class MessageManager {
 
         resentCount++;
         if (resentCount <= 3) {
-          SendTextManager.sendMessage(message, ip, deviceId, resend: true);
+          SendMessageManager.sendMessage(message, ip, deviceId, resend: true);
         }
         if (resentCount >= 3) {
           message.base?.state = MessageStateType.fail.code;
@@ -88,7 +89,7 @@ class MessageManager {
   }
 
   /// 收到 ack
-  static void onAck(RawAckBean ack) {
+  static void onAck(CmdAckBean ack) {
     final fromMessageId = ack.fromMessageId;
     if (fromMessageId == null) return;
     final message = sendingMessages.remove(fromMessageId);

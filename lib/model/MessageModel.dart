@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:yf_code/bean/message/BaseMessageBean.dart';
+import 'package:yf_code/bean/BaseMessageBean.dart';
 
 class MessageModel extends ChangeNotifier {
   MessageModel(this.sessionId, List<Message> historyMessages)

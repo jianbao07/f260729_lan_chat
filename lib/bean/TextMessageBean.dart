@@ -1,4 +1,4 @@
-import 'package:yf_code/bean/message/BaseMessageBean.dart';
+import 'package:yf_code/bean/BaseMessageBean.dart';
 import 'package:yf_code/enum/MessageType.dart';
 
 /// type : "text"

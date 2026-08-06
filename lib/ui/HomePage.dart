@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
-import 'package:yf_code/manager/SendTextManager.dart';
+import 'package:yf_code/manager/SendMessageManager.dart';
 import 'package:yf_code/model/DeviceModel.dart';
 import 'package:yf_code/ui/ChatPage.dart';
 import 'package:yf_code/InitManager.dart';

@@ -1,6 +1,6 @@
 
 enum MessageType{
-  text("text"),rawAck("ack");
+  text("text"),rawAck("ack"),file("file");
 
   const MessageType(this.code);
 

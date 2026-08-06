@@ -3,15 +3,15 @@
 /// timestamp_utc : 1785173158277
 /// device_id : "xxx"
 
-class BeatBean {
-  BeatBean({
+class CmdBeatBean {
+  CmdBeatBean({
     this.name,
     this.type,
     this.timestampUtc,
     this.deviceId,
   });
 
-  BeatBean.fromJson(dynamic json) {
+  CmdBeatBean.fromJson(dynamic json) {
     name = json['name'];
     type = json['type'];
     timestampUtc = json['timestamp_utc'];

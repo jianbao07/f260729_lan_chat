@@ -1,4 +1,3 @@
-import 'package:yf_code/bean/message/TextMessageBean.dart';
 import 'package:yf_code/enum/MessageStateType.dart';
 
 /// from_message_id : "3"
@@ -62,25 +61,20 @@ class BaseMessageBean {
 
 abstract class Message{
   bool initBase(String? myDeviceId, String? deviceId,String fromMessageId){
-    final message=this;
-    if (message is TextMessageBean) {
-      final base = message.base ?? BaseMessageBean();
-      base.fromMessageId=fromMessageId;
-      base.fromDeviceId ??= myDeviceId;
-      base.toDeviceId ??= deviceId;
-      if (myDeviceId != null && deviceId != null) {
-        base.sessionId ??= myDeviceId.compareTo(deviceId) <= 0
-            ? '$myDeviceId:$deviceId'
-            : '$deviceId:$myDeviceId';
-      }
-      base.sendTimestampUtc ??=
-          DateTime.now().toUtc().millisecondsSinceEpoch;
-      base.state ??= MessageStateType.sending.code;
-      message.base = base;
-      return true;
-    }else{
-      return false;
+    final base = this.base ?? BaseMessageBean();
+    base.fromMessageId=fromMessageId;
+    base.fromDeviceId ??= myDeviceId;
+    base.toDeviceId ??= deviceId;
+    if (myDeviceId != null && deviceId != null) {
+      base.sessionId ??= myDeviceId.compareTo(deviceId) <= 0
+          ? '$myDeviceId:$deviceId'
+          : '$deviceId:$myDeviceId';
     }
+    base.sendTimestampUtc ??=
+        DateTime.now().toUtc().millisecondsSinceEpoch;
+    base.state ??= MessageStateType.sending.code;
+    this.base = base;
+    return true;
   }
   BaseMessageBean? base;
   Map<String, dynamic> toJson();

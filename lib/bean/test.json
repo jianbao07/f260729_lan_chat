@@ -1,7 +1,8 @@
 {
-  "type": "ack",
-  "from_message_id": 3,
-  "from_device_id": "xxx",
-  "to_device_id": "yyy",
-  "send_timestamp_utc": 1785173158277
+  "transfer_id": "a3f1c2d4-5e6b-7890-abcd-ef1234567890",
+  "type": "file",
+  "mime_type": "text/plain",
+  "name": "txt",
+  "total_size": 15728640,
+  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 }

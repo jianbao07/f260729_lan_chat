@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:yf_code/bean/Result.dart';
-import 'package:yf_code/manager/SendTextManager.dart';
+import 'package:yf_code/manager/SendMessageManager.dart';
 import 'package:yf_code/utils/log.dart';
 import 'package:yf_code/utils/NetworkUtils.dart';
 
@@ -25,7 +25,7 @@ class TextTcpManager {
   }
 
   /// 先发送 4 字节无符号整数（大端）告知 payload 大小，再发送 UTF-8 正文。
-  static Future<Result<void>> sendText(String payload,Uint8List payloadUint8, String ip) async {
+  static Future<Result<bool>> sendText(String payload,Uint8List payloadUint8, String ip) async {
     try {
       iLog("发送文本消息 ${payload}");
       final socket = await _getOrCreateConnect(ip);
@@ -33,7 +33,7 @@ class TextTcpManager {
       socket.add(header.buffer.asUint8List());
       socket.add(payloadUint8);
       await socket.flush();
-      return Result.success();
+      return Result.success(true);
     } catch (e) {
       iLog("消息发送失败 to=$ip:$_MESSAGE_PORT err=$e");
       _removeConnect(ip);
@@ -81,7 +81,7 @@ class TextTcpManager {
           expectedLength = null;
           final text = utf8.decode(payload);
           iLog("收到文本消息 from=$ip:$port text=$text");
-          SendTextManager.onTextMessage(text, ip);
+          SendMessageManager.onTextMessage(text, ip);
         }
       },
       onError: (e) {

@@ -1,16 +1,20 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:yf_code/InitManager.dart';
-import 'package:yf_code/bean/RawAckBean.dart';
-import 'package:yf_code/bean/message/BaseMessageBean.dart';
-import 'package:yf_code/bean/message/TextMessageBean.dart';
+import 'package:yf_code/bean/CmdAckBean.dart';
+import 'package:yf_code/bean/BaseMessageBean.dart';
+import 'package:yf_code/bean/CmdFileBean.dart';
+import 'package:yf_code/bean/TextMessageBean.dart';
 import 'package:yf_code/enum/MessageType.dart';
+import 'package:yf_code/manager/FileTcpManager.dart';
 import 'package:yf_code/manager/MessageManager.dart';
 import 'package:yf_code/manager/TextTcpManager.dart';
 import 'package:yf_code/utils/log.dart';
 
-class SendTextManager {
-  SendTextManager._();
+class SendMessageManager {
+  SendMessageManager._();
+  static const int MAX_SIZE=16*1024;
 
   static Future<void> sendMessage(Message message, String ip,String? deviceId,{bool resend=false}) async {
     if (!resend) {
@@ -23,14 +27,21 @@ class SendTextManager {
     }
     final payload = jsonEncode(message.toJson());
     final payloadUint8 = utf8.encode(payload);
-    if(payloadUint8.lengthInBytes>5120){
-      iLog("大小超过5KB，不允许通过text发送，请使用文件发送");
+    if(payloadUint8.lengthInBytes>MAX_SIZE){
+      iLog("大小超过${MAX_SIZE/1024}KB，不允许通过text发送，请使用文件发送");
       return;
     }
-    TextTcpManager.sendText(payload,payloadUint8, ip);
+    await TextTcpManager.sendText(payload,payloadUint8, ip);
     if(!resend){
-      MessageManager.onMessageSent(message,ip,deviceId);
+      if(message is! CmdFileBean){
+        MessageManager.onMessageSent(message,ip,deviceId);
+      }
     }
+  }
+
+  static Future<void> sendFile(File file,String ip,String? deviceId,{bool resend=false})async{
+    final f=FileTcpManager(ip,deviceId);
+    f.sendFile(file,resend: resend);
   }
 
   static void onTextMessage(String text, String ip) {
@@ -44,15 +55,21 @@ class SendTextManager {
           final msg = TextMessageBean.fromJson(json);
           iLog("文本消息解析成功=${msg.text}");
           MessageManager.onMessageReceived(msg);
-          _sendAckMessage(ip,msg.base?.fromMessageId);
+          sendAckMessage(ip,msg.base?.fromMessageId);
           break;
         case MessageType.rawAck:
-          final msg = RawAckBean.fromJson(json);
+          final msg = CmdAckBean.fromJson(json);
           iLog("文本消息解析成功 ACK");
           MessageManager.onAck(msg);
           break;
         case null:
           iLog("文本消息解析失败 from=$ip raw=$text");
+          break;
+        case MessageType.file:
+          final msg = CmdFileBean.fromJson(json);
+          final f=FileTcpManager(ip,msg.base?.fromDeviceId);
+          sendAckMessage(ip, msg.base?.fromMessageId);
+          f.startConnection(msg);
           break;
       }
     } catch (e) {
@@ -60,8 +77,8 @@ class SendTextManager {
     }
   }
 
-  static Future<void> _sendAckMessage(String ip,String? fromMessageId)async{
-    final ack=RawAckBean(fromMessageId:fromMessageId,);
+  static Future<void> sendAckMessage(String ip,String? fromMessageId)async{
+    final ack=CmdAckBean(fromMessageId:fromMessageId,);
     final payload=jsonEncode(ack.toJson());
     final payloadUint8 = utf8.encode(payload);
     TextTcpManager.sendText(payload,payloadUint8, ip);

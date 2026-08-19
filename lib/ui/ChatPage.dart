@@ -1,10 +1,17 @@
+import 'dart:io';
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:yf_code/InitManager.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
-import 'package:yf_code/bean/BaseMessageBean.dart';
+import 'package:yf_code/bean/FileMessageDisplay.dart';
+import 'package:yf_code/bean/MessageDisplay.dart';
 import 'package:yf_code/bean/TextMessageBean.dart';
+import 'package:yf_code/enum/FileStateType.dart';
 import 'package:yf_code/enum/MessageStateType.dart';
+import 'package:yf_code/manager/FileTransferManager.dart';
 import 'package:yf_code/manager/MessageManager.dart';
 import 'package:yf_code/manager/SendMessageManager.dart';
 import 'package:yf_code/model/MessageModel.dart';
@@ -24,6 +31,8 @@ class _ChatPageState extends State<ChatPage> {
   final _scrollController = ScrollController();
   final _focusNode = FocusNode();
   bool _sending = false;
+  bool _pickingFile = false;
+  final Set<String> _fileActionBusy = {};
 
   late final String _sessionId;
   late final MessageModel _messageModel;
@@ -67,21 +76,26 @@ class _ChatPageState extends State<ChatPage> {
     super.dispose();
   }
 
-  Future<void> _send() async {
-    final text = _controller.text.trim();
-    if (text.isEmpty || _sending) return;
+  bool _ensurePeerReady() {
     if (_peerIp.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('对方地址无效，无法发送')),
       );
-      return;
+      return false;
     }
     if (_peerDeviceId == null || InitManager.deviceId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('设备信息未就绪，无法发送')),
       );
-      return;
+      return false;
     }
+    return true;
+  }
+
+  Future<void> _send() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty || _sending) return;
+    if (!_ensurePeerReady()) return;
 
     final msg = TextMessageBean(text: text);
     setState(() {
@@ -95,6 +109,116 @@ class _ChatPageState extends State<ChatPage> {
     setState(() {
       _sending = false;
     });
+  }
+
+  Future<void> _pickAndSendFile() async {
+    if (_pickingFile || _sending) return;
+    if (!_ensurePeerReady()) return;
+
+    setState(() => _pickingFile = true);
+    try {
+      final file = await openFile();
+      if (file == null) return;
+      final path = file.path;
+      if (path.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法获取文件路径')),
+        );
+        return;
+      }
+
+      setState(() => _sending = true);
+      await SendMessageManager.sendFile(File(path), _peerIp, _peerDeviceId);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('发送文件失败：$e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _pickingFile = false;
+          _sending = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _acceptFile(String transferId) async {
+    if (_fileActionBusy.contains(transferId)) return;
+    setState(() => _fileActionBusy.add(transferId));
+    try {
+      await FileTransferManager.accept(transferId);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('接收失败：$e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _fileActionBusy.remove(transferId));
+      }
+    }
+  }
+
+  Future<void> _rejectFile(String transferId) async {
+    if (_fileActionBusy.contains(transferId)) return;
+    setState(() => _fileActionBusy.add(transferId));
+    try {
+      await FileTransferManager.reject(transferId);
+    } finally {
+      if (mounted) {
+        setState(() => _fileActionBusy.remove(transferId));
+      }
+    }
+  }
+
+  Future<void> _onFileTap(FileMessageDisplay file, {required bool mine}) async {
+    switch (file.fileState) {
+      case FileStateType.send:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(mine ? '等待对方接收文件' : '请先接收文件'),
+          ),
+        );
+        return;
+      case FileStateType.transferring:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('文件正在传输中')),
+        );
+        return;
+      case FileStateType.rejected:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(mine ? '对方已拒绝该文件' : '已拒绝该文件')),
+        );
+        return;
+      case FileStateType.success:
+        break;
+    }
+
+    final path = file.localPath;
+    if (path == null || path.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('本地文件路径不可用')),
+      );
+      return;
+    }
+    if (!await File(path).exists()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('本地文件不存在或已被移动')),
+      );
+      return;
+    }
+
+    final result = await OpenFilex.open(path, type: file.mimeType);
+    if (!mounted) return;
+    if (result.type != ResultType.done) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message)),
+      );
+    }
   }
 
   void _scrollToBottom() {
@@ -111,6 +235,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   Widget build(BuildContext context) {
     final messages = _messageModel.messages;
+    final busy = _sending || _pickingFile;
     return Scaffold(
       body: Stack(
         children: [
@@ -131,9 +256,15 @@ class _ChatPageState extends State<ChatPage> {
                           padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                           itemCount: messages.length,
                           itemBuilder: (context, index) {
+                            final msg = messages[index];
                             return _MessageBubble(
-                              message: messages[index],
+                              message: msg,
                               myDeviceId: InitManager.deviceId,
+                              fileActionBusy: msg is FileMessageDisplay &&
+                                  _fileActionBusy.contains(msg.transferId),
+                              onAcceptFile: _acceptFile,
+                              onRejectFile: _rejectFile,
+                              onFileTap: _onFileTap,
                             );
                           },
                         ),
@@ -141,8 +272,9 @@ class _ChatPageState extends State<ChatPage> {
                 _Composer(
                   controller: _controller,
                   focusNode: _focusNode,
-                  sending: _sending,
+                  busy: busy,
                   onSend: _send,
+                  onAttach: _pickAndSendFile,
                 ),
               ],
             ),
@@ -292,7 +424,7 @@ class _EmptyChat extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              '消息经局域网直连送达，无需外网',
+              '可发送文字或文件，经局域网直连送达',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -311,21 +443,22 @@ class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     required this.message,
     required this.myDeviceId,
+    required this.fileActionBusy,
+    required this.onAcceptFile,
+    required this.onRejectFile,
+    required this.onFileTap,
   });
 
-  final Message message;
+  final MessageDisplay message;
   final String? myDeviceId;
+  final bool fileActionBusy;
+  final ValueChanged<String> onAcceptFile;
+  final ValueChanged<String> onRejectFile;
+  final void Function(FileMessageDisplay file, {required bool mine}) onFileTap;
 
   bool get _isMine => message.base?.fromDeviceId == myDeviceId;
 
-  String get _text {
-    if (message is TextMessageBean) {
-      return (message as TextMessageBean).text ?? '';
-    }
-    return '';
-  }
-
-  MessageStateType get _state =>
+  MessageStateType get _deliveryState =>
       MessageStateType.fromCode(message.base?.state ?? '') ??
       MessageStateType.sending;
 
@@ -346,6 +479,7 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mine = _isMine;
+    final isFile = message is FileMessageDisplay;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -361,10 +495,8 @@ class _MessageBubble extends StatelessWidget {
               children: [
                 Container(
                   constraints: BoxConstraints(
-                    maxWidth: MediaQuery.sizeOf(context).width * 0.72,
+                    maxWidth: MediaQuery.sizeOf(context).width * 0.78,
                   ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: mine
                         ? const Color(0xFF0E6E68)
@@ -379,16 +511,39 @@ class _MessageBubble extends StatelessWidget {
                         ? null
                         : Border.all(color: const Color(0x1A0E6E68)),
                   ),
-                  child: Text(
-                    _text,
-                    style: TextStyle(
-                      fontSize: 15,
-                      height: 1.35,
-                      color: mine
-                          ? Colors.white
-                          : const Color(0xFF152422),
-                    ),
-                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: isFile
+                      ? _FileBubbleBody(
+                          file: message as FileMessageDisplay,
+                          mine: mine,
+                          busy: fileActionBusy,
+                          onTap: () => onFileTap(
+                            message as FileMessageDisplay,
+                            mine: mine,
+                          ),
+                          onAccept: () => onAcceptFile(
+                              (message as FileMessageDisplay).transferId),
+                          onReject: () => onRejectFile(
+                              (message as FileMessageDisplay).transferId),
+                        )
+                      : Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          child: Text(
+                            message is TextMessageBean
+                                ? ((message as TextMessageBean).text ?? '')
+                                : '',
+                            style: TextStyle(
+                              fontSize: 15,
+                              height: 1.35,
+                              color: mine
+                                  ? Colors.white
+                                  : const Color(0xFF152422),
+                            ),
+                          ),
+                        ),
                 ),
                 const SizedBox(height: 4),
                 Row(
@@ -404,7 +559,7 @@ class _MessageBubble extends StatelessWidget {
                     ),
                     if (mine) ...[
                       const SizedBox(width: 6),
-                      _StatusIcon(state: _state),
+                      _StatusIcon(state: _deliveryState),
                     ],
                   ],
                 ),
@@ -414,6 +569,240 @@ class _MessageBubble extends StatelessWidget {
           if (mine) const SizedBox(width: 4),
         ],
       ),
+    );
+  }
+}
+
+class _FileBubbleBody extends StatelessWidget {
+  const _FileBubbleBody({
+    required this.file,
+    required this.mine,
+    required this.busy,
+    required this.onTap,
+    required this.onAccept,
+    required this.onReject,
+  });
+
+  final FileMessageDisplay file;
+  final bool mine;
+  final bool busy;
+  final VoidCallback onTap;
+  final VoidCallback onAccept;
+  final VoidCallback onReject;
+
+  static String formatSize(int? bytes) {
+    if (bytes == null || bytes < 0) return '';
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+  }
+
+  static String stateLabel(FileStateType state, {required bool mine}) {
+    switch (state) {
+      case FileStateType.send:
+        return mine ? '等待对方接收' : '待你确认接收';
+      case FileStateType.transferring:
+        return '正在传输…';
+      case FileStateType.success:
+        return '传输完成 · 点击打开';
+      case FileStateType.rejected:
+        return mine ? '对方已拒绝' : '已拒绝';
+    }
+  }
+
+  static IconData iconForMime(String? mime) {
+    final m = mime ?? '';
+    if (m.startsWith('image/')) return Icons.image_outlined;
+    if (m.startsWith('video/')) return Icons.movie_outlined;
+    if (m.startsWith('audio/')) return Icons.audiotrack_outlined;
+    if (m.contains('pdf')) return Icons.picture_as_pdf_outlined;
+    if (m.contains('zip') || m.contains('compressed')) {
+      return Icons.folder_zip_outlined;
+    }
+    return Icons.insert_drive_file_outlined;
+  }
+
+  Color _stateColor({required bool mine}) {
+    switch (file.fileState) {
+      case FileStateType.send:
+        return mine ? const Color(0xFFFFE08A) : const Color(0xFF0E6E68);
+      case FileStateType.transferring:
+        return mine ? const Color(0xFFB8E0FF) : const Color(0xFF2A7CB8);
+      case FileStateType.success:
+        return mine ? const Color(0xFFB6F0C8) : const Color(0xFF2A9B6A);
+      case FileStateType.rejected:
+        return mine ? const Color(0xFFFFC4B8) : const Color(0xFFC45C4A);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = mine ? Colors.white : const Color(0xFF152422);
+    final sub = mine
+        ? Colors.white.withValues(alpha: 0.78)
+        : const Color(0xFF6A7C79);
+    final sizeLabel = formatSize(file.totalSize);
+    final showActions =
+        !mine && file.fileState == FileStateType.send && !busy;
+    final showProgress =
+        file.fileState == FileStateType.transferring || busy;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: mine
+                          ? Colors.white.withValues(alpha: 0.14)
+                          : const Color(0xFF0E6E68).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      iconForMime(file.mimeType),
+                      size: 22,
+                      color: fg,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          file.name ?? '文件',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            height: 1.3,
+                            color: fg,
+                          ),
+                        ),
+                        if (sizeLabel.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            sizeLabel,
+                            style: TextStyle(fontSize: 12.5, color: sub),
+                          ),
+                        ],
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: mine
+                                ? Colors.white.withValues(alpha: 0.16)
+                                : _stateColor(mine: false)
+                                    .withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            stateLabel(file.fileState, mine: mine),
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: mine
+                                  ? _stateColor(mine: true)
+                                  : _stateColor(mine: false),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            12,
+            showProgress || showActions || (!mine &&
+                    file.fileState == FileStateType.success &&
+                    file.localPath != null)
+                ? 10
+                : 12,
+            12,
+            12,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (showProgress) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    minHeight: 3,
+                    color: mine ? Colors.white : const Color(0xFF0E6E68),
+                    backgroundColor: mine
+                        ? Colors.white.withValues(alpha: 0.2)
+                        : const Color(0x1A0E6E68),
+                  ),
+                ),
+                if (showActions ||
+                    (!mine &&
+                        file.fileState == FileStateType.success &&
+                        file.localPath != null))
+                  const SizedBox(height: 12),
+              ],
+              if (showActions)
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: onReject,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFC45C4A),
+                          side: const BorderSide(color: Color(0x66C45C4A)),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        child: const Text('拒绝'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: onAccept,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0E6E68),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        child: const Text('接收'),
+                      ),
+                    ),
+                  ],
+                ),
+              if (!mine &&
+                  file.fileState == FileStateType.success &&
+                  file.localPath != null)
+                Text(
+                  '已保存至本地',
+                  style: TextStyle(fontSize: 11.5, color: sub),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -455,21 +844,23 @@ class _Composer extends StatelessWidget {
   const _Composer({
     required this.controller,
     required this.focusNode,
-    required this.sending,
+    required this.busy,
     required this.onSend,
+    required this.onAttach,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
-  final bool sending;
+  final bool busy;
   final VoidCallback onSend;
+  final VoidCallback onAttach;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+        padding: const EdgeInsets.fromLTRB(4, 6, 6, 6),
         decoration: BoxDecoration(
           color: const Color(0xF2FFFFFF),
           borderRadius: BorderRadius.circular(18),
@@ -478,12 +869,21 @@ class _Composer extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
+            IconButton(
+              onPressed: busy ? null : onAttach,
+              tooltip: '发送文件',
+              icon: Icon(
+                Icons.attach_file_rounded,
+                color: Color(0xFF0E6E68).withValues(alpha: busy ? 0.35 : 1),
+              ),
+            ),
             Expanded(
               child: TextField(
                 controller: controller,
                 focusNode: focusNode,
                 minLines: 1,
                 maxLines: 5,
+                enabled: !busy,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => onSend(),
                 inputFormatters: [
@@ -506,21 +906,29 @@ class _Composer extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
             Material(
               color: const Color(0xFF0E6E68),
               borderRadius: BorderRadius.circular(14),
               child: InkWell(
-                onTap: sending ? null : onSend,
+                onTap: busy ? null : onSend,
                 borderRadius: BorderRadius.circular(14),
                 child: SizedBox(
                   width: 44,
                   height: 44,
-                  child: Icon(
-                    Icons.send_rounded,
-                    size: 20,
-                    color: Colors.white.withValues(alpha: sending ? 0.5 : 1),
-                  ),
+                  child: busy
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.send_rounded,
+                          size: 20,
+                          color: Colors.white,
+                        ),
                 ),
               ),
             ),

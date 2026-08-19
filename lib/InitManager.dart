@@ -3,7 +3,7 @@ import 'dart:io' show Platform;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:yf_code/manager/OnlineDeviceManager.dart';
-import 'package:yf_code/manager/TextTcpManager.dart';
+import 'package:yf_code/channel/TextChannel.dart';
 
 class InitManager{
   InitManager._();
@@ -21,7 +21,7 @@ class InitManager{
     await _getPackageInfo();
     OnlineDeviceManager.startBeat();
     OnlineDeviceManager.listenerBeat();
-    TextTcpManager.init();
+    TextChannel.init();
   }
 
   static Future<void> _getDeviceInfo() async {

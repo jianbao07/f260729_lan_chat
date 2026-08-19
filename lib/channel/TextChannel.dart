@@ -7,8 +7,8 @@ import 'package:yf_code/manager/SendMessageManager.dart';
 import 'package:yf_code/utils/log.dart';
 import 'package:yf_code/utils/NetworkUtils.dart';
 
-class TextTcpManager {
-  TextTcpManager._();
+class TextChannel {
+  TextChannel._();
   static const int _MESSAGE_PORT = 54833;
   static ServerSocket? _serverSocket;
   static final Map<String, Socket> _connectMap = {};

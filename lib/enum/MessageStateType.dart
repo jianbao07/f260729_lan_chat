@@ -1,7 +1,6 @@
 
 enum MessageStateType{
-  sending("sending"),fail("fail"),success("success"),
-  transfer("transfer");//传输状态，文件传输特有
+  sending("sending"),fail("fail"),success("success");
 
   const MessageStateType(this.code);
 

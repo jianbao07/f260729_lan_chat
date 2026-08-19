@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:yf_code/ui/HomePage.dart';
 import 'package:yf_code/InitManager.dart';
+import 'package:yf_code/manager/FileTransferManager.dart';
+
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  FileTransferManager.navigatorKey = appNavigatorKey;
   InitManager.initApp();
   runApp(const MyApp());
 }
@@ -14,6 +18,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       title: 'LAN Chat',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

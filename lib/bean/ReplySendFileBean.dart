@@ -1,6 +1,6 @@
 import 'package:yf_code/bean/BaseMessageBean.dart';
 import 'package:yf_code/bean/SendFileBean.dart';
-import 'package:yf_code/enum/FileStateType.dart';
+import 'package:yf_code/enum/FileTransferState.dart';
 
 /// type : "file"
 /// base : {"session_id":"xxx","from_device_id":"xxx","to_device_id":"yyy","send_timestamp_utc":1785173158277,"success_timestamp_utc":1785173158277,"fail_timestamp_utc":1785173158277,"state":"sending"}
@@ -59,7 +59,7 @@ class ReplySendFileBean extends Message {
   static ReplySendFileBean buildRejected(SendFileBean sendFileBean) {
     return ReplySendFileBean(
       type: sendFileBean.type,
-      state: FileStateType.rejected.code,
+      state: FileTransferState.rejected.code,
       transferId: sendFileBean.transferId,
       mimeType: sendFileBean.mimeType,
       name: sendFileBean.name,
@@ -71,7 +71,7 @@ class ReplySendFileBean extends Message {
   static ReplySendFileBean buildAccept(SendFileBean sendFileBean) {
     return ReplySendFileBean(
       type: sendFileBean.type,
-      state: FileStateType.transferring.code,
+      state: FileTransferState.transferring.code,
       transferId: sendFileBean.transferId,
       mimeType: sendFileBean.mimeType,
       name: sendFileBean.name,

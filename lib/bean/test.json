@@ -1,5 +1,7 @@
 {
   "transfer_id": "xxx",
-  "type": "file",
-  "state": "success"
+  "state": "send",
+  "is_sender": true,
+  "current": 524,
+  "total": 63254
 }

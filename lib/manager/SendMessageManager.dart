@@ -8,7 +8,7 @@ import 'package:yf_code/bean/BaseMessageBean.dart';
 import 'package:yf_code/bean/ReplySendFileBean.dart';
 import 'package:yf_code/bean/SendFileBean.dart';
 import 'package:yf_code/bean/TextMessageBean.dart';
-import 'package:yf_code/enum/FileStateType.dart';
+import 'package:yf_code/enum/FileTransferState.dart';
 import 'package:yf_code/enum/MessageType.dart';
 import 'package:yf_code/manager/FileTransferManager.dart';
 import 'package:yf_code/manager/MessageManager.dart';
@@ -55,7 +55,7 @@ class SendMessageManager {
   }
 
   /// 兼容旧调用：转发到 [FileTransferManager.offer]。
-  static Future<void> sendFile(File file, String ip, String? deviceId, {bool resend = false,}) async {
+  static Future<void> sendFile(File file, String ip, String? deviceId) async {
     await FileTransferManager.offer(file, ip, deviceId);
   }
 
@@ -92,18 +92,19 @@ class SendMessageManager {
   }
 
   static void _onFileMessage(Map<String, dynamic> json, String ip) {
-    final state = FileStateType.fromCode(json['state'] as String? ?? '');
+    final state = FileTransferState.fromCode(json['state'] as String? ?? '');
     switch (state) {
-      case FileStateType.send:
+      case FileTransferState.send:
         final msg = SendFileBean.fromJson(json);
         FileTransferManager.onOffer(msg, ip);
         break;
-      case FileStateType.rejected:
-      case FileStateType.transferring:
+      case FileTransferState.rejected:
+      case FileTransferState.transferring:
         final msg = ReplySendFileBean.fromJson(json);
         FileTransferManager.onReply(msg, ip);
         break;
-      case FileStateType.success:
+      case FileTransferState.success:
+      case FileTransferState.failed:
         final msg = AckFileBean.fromJson(json);
         FileTransferManager.onAck(msg);
         break;

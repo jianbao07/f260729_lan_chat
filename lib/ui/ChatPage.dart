@@ -9,8 +9,9 @@ import 'package:yf_code/bean/DeviceBean.dart';
 import 'package:yf_code/bean/FileMessageDisplay.dart';
 import 'package:yf_code/bean/MessageDisplay.dart';
 import 'package:yf_code/bean/TextMessageBean.dart';
-import 'package:yf_code/enum/FileStateType.dart';
+import 'package:yf_code/enum/FileTransferState.dart';
 import 'package:yf_code/enum/MessageStateType.dart';
+import 'package:yf_code/manager/AppFileStore.dart';
 import 'package:yf_code/manager/FileTransferManager.dart';
 import 'package:yf_code/manager/MessageManager.dart';
 import 'package:yf_code/manager/SendMessageManager.dart';
@@ -36,6 +37,7 @@ class _ChatPageState extends State<ChatPage> {
 
   late final String _sessionId;
   late final MessageModel _messageModel;
+  int _lastMessageCount = 0;
 
   String get _peerName =>
       widget.device.name?.isNotEmpty == true ? widget.device.name! : '未知设备';
@@ -51,6 +53,7 @@ class _ChatPageState extends State<ChatPage> {
       widget.device.deviceId,
     );
     _messageModel = MessageManager.createMessageModel(_sessionId);
+    _lastMessageCount = _messageModel.messages.length;
     _messageModel.addListener(_onMessagesChanged);
   }
 
@@ -62,8 +65,11 @@ class _ChatPageState extends State<ChatPage> {
 
   void _onMessagesChanged() {
     if (!mounted) return;
+    final count = _messageModel.messages.length;
+    final appended = count > _lastMessageCount;
+    _lastMessageCount = count;
     setState(() {});
-    _scrollToBottom();
+    if (appended) _scrollToBottom();
   }
 
   @override
@@ -117,19 +123,26 @@ class _ChatPageState extends State<ChatPage> {
 
     setState(() => _pickingFile = true);
     try {
-      final file = await openFile();
-      if (file == null) return;
-      final path = file.path;
-      if (path.isEmpty) {
+      final picked = await openFile();
+      if (picked == null) return;
+      final name = picked.name.isNotEmpty
+          ? picked.name
+          : (picked.path.isNotEmpty ? File(picked.path).uri.pathSegments.last : '');
+      if (name.isEmpty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法获取文件路径')),
+          const SnackBar(content: Text('无法获取文件名')),
         );
         return;
       }
 
       setState(() => _sending = true);
-      await SendMessageManager.sendFile(File(path), _peerIp, _peerDeviceId);
+      final local = await AppFileStore.importOutgoing(
+        name: name,
+        sourcePath: picked.path.isEmpty ? null : picked.path,
+        openContent: picked.openRead,
+      );
+      await SendMessageManager.sendFile(local, _peerIp, _peerDeviceId);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -176,24 +189,29 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _onFileTap(FileMessageDisplay file, {required bool mine}) async {
     switch (file.fileState) {
-      case FileStateType.send:
+      case FileTransferState.send:
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(mine ? '等待对方接收文件' : '请先接收文件'),
           ),
         );
         return;
-      case FileStateType.transferring:
+      case FileTransferState.transferring:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('文件正在传输中')),
         );
         return;
-      case FileStateType.rejected:
+      case FileTransferState.rejected:
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(mine ? '对方已拒绝该文件' : '已拒绝该文件')),
         );
         return;
-      case FileStateType.success:
+      case FileTransferState.failed:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('文件传输失败')),
+        );
+        return;
+      case FileTransferState.success:
         break;
     }
 
@@ -531,10 +549,13 @@ class _MessageBubble extends StatelessWidget {
                             horizontal: 14,
                             vertical: 10,
                           ),
-                          child: Text(
+                          child: SelectableText(
                             message is TextMessageBean
                                 ? ((message as TextMessageBean).text ?? '')
                                 : '',
+                            cursorColor: mine
+                                ? Colors.white
+                                : const Color(0xFF0E6E68),
                             style: TextStyle(
                               fontSize: 15,
                               height: 1.35,
@@ -599,16 +620,18 @@ class _FileBubbleBody extends StatelessWidget {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
   }
 
-  static String stateLabel(FileStateType state, {required bool mine}) {
+  static String stateLabel(FileTransferState state, {required bool mine}) {
     switch (state) {
-      case FileStateType.send:
+      case FileTransferState.send:
         return mine ? '等待对方接收' : '待你确认接收';
-      case FileStateType.transferring:
+      case FileTransferState.transferring:
         return '正在传输…';
-      case FileStateType.success:
+      case FileTransferState.success:
         return '传输完成 · 点击打开';
-      case FileStateType.rejected:
+      case FileTransferState.rejected:
         return mine ? '对方已拒绝' : '已拒绝';
+      case FileTransferState.failed:
+        return '传输失败';
     }
   }
 
@@ -626,13 +649,15 @@ class _FileBubbleBody extends StatelessWidget {
 
   Color _stateColor({required bool mine}) {
     switch (file.fileState) {
-      case FileStateType.send:
+      case FileTransferState.send:
         return mine ? const Color(0xFFFFE08A) : const Color(0xFF0E6E68);
-      case FileStateType.transferring:
+      case FileTransferState.transferring:
         return mine ? const Color(0xFFB8E0FF) : const Color(0xFF2A7CB8);
-      case FileStateType.success:
+      case FileTransferState.success:
         return mine ? const Color(0xFFB6F0C8) : const Color(0xFF2A9B6A);
-      case FileStateType.rejected:
+      case FileTransferState.rejected:
+        return mine ? const Color(0xFFFFC4B8) : const Color(0xFFC45C4A);
+      case FileTransferState.failed:
         return mine ? const Color(0xFFFFC4B8) : const Color(0xFFC45C4A);
     }
   }
@@ -643,11 +668,14 @@ class _FileBubbleBody extends StatelessWidget {
     final sub = mine
         ? Colors.white.withValues(alpha: 0.78)
         : const Color(0xFF6A7C79);
-    final sizeLabel = formatSize(file.totalSize);
+    final transferring = file.fileState == FileTransferState.transferring;
+    final sizeLabel = transferring && file.total != null && file.total! > 0
+        ? '${formatSize(file.current)} / ${formatSize(file.total)}'
+        : formatSize(file.totalSize);
     final showActions =
-        !mine && file.fileState == FileStateType.send && !busy;
+        !mine && file.fileState == FileTransferState.send && !busy;
     final showProgress =
-        file.fileState == FileStateType.transferring || busy;
+        file.fileState == FileTransferState.transferring || busy;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -736,7 +764,7 @@ class _FileBubbleBody extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(
             12,
             showProgress || showActions || (!mine &&
-                    file.fileState == FileStateType.success &&
+                    file.fileState == FileTransferState.success &&
                     file.localPath != null)
                 ? 10
                 : 12,
@@ -751,6 +779,7 @@ class _FileBubbleBody extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     minHeight: 3,
+                    value: file.progress,
                     color: mine ? Colors.white : const Color(0xFF0E6E68),
                     backgroundColor: mine
                         ? Colors.white.withValues(alpha: 0.2)
@@ -759,7 +788,7 @@ class _FileBubbleBody extends StatelessWidget {
                 ),
                 if (showActions ||
                     (!mine &&
-                        file.fileState == FileStateType.success &&
+                        file.fileState == FileTransferState.success &&
                         file.localPath != null))
                   const SizedBox(height: 12),
               ],
@@ -793,7 +822,7 @@ class _FileBubbleBody extends StatelessWidget {
                   ],
                 ),
               if (!mine &&
-                  file.fileState == FileStateType.success &&
+                  file.fileState == FileTransferState.success &&
                   file.localPath != null)
                 Text(
                   '已保存至本地',

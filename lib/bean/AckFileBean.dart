@@ -1,6 +1,6 @@
 import 'package:yf_code/bean/BaseMessageBean.dart';
 import 'package:yf_code/bean/SendFileBean.dart';
-import 'package:yf_code/enum/FileStateType.dart';
+import 'package:yf_code/enum/FileTransferState.dart';
 
 /// transfer_id : "xxx"
 /// type : "file"
@@ -51,8 +51,16 @@ class AckFileBean extends Message {
     return AckFileBean(
       transferId: sendFileBean.transferId,
       type: sendFileBean.type,
-      state: FileStateType.success.code,
+      state: FileTransferState.success.code,
       receiverLocalPath: receiverLocalPath,
+    );
+  }
+
+  static AckFileBean buildFailed(SendFileBean sendFileBean) {
+    return AckFileBean(
+      transferId: sendFileBean.transferId,
+      type: sendFileBean.type,
+      state: FileTransferState.failed.code,
     );
   }
 }

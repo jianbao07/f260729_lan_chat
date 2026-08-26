@@ -1,0 +1,45 @@
+---
+description: Dart 方法签名尽量写在一行，只有参数过多时才换行
+globs: "**/*.dart"
+alwaysApply: false
+---
+
+# 方法签名单行优先
+
+声明方法、构造函数、顶层函数时，签名尽量写在同一行：返回类型、方法名、参数列表、`async` 等修饰都不要拆开。只有参数确实太多、单行难以阅读时才换行。
+
+```dart
+// ❌ BAD：参数不多却拆成多行
+static void _upsertRecord(
+  String transferId, {
+  bool? isSender,
+  FileTransferState? state,
+}) {
+
+Future<void> offer(
+  File file,
+  String ip,
+  String? deviceId,
+) async {
+
+// ✅ GOOD：参数不多，整行签名
+static void _upsertRecord(String transferId, {bool? isSender, FileTransferState? state}) {
+
+Future<void> offer(File file, String ip, String? deviceId) async {
+```
+
+参数很多（多个 named 参数、多个回调）时再换行，每个参数单独一行：
+
+```dart
+// ✅ GOOD：参数过多，才换行
+static void _upsertRecord(
+  String transferId, {
+  bool? isSender,
+  FileTransferState? state,
+  int? current,
+  int? total,
+  String? errorMessage,
+}) {
+```
+
+不要只把左括号换行、参数仍挤在一起。函数体 `{` 仍紧跟签名末尾。

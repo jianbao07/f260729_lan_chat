@@ -1,5 +1,5 @@
 import 'package:yf_code/bean/BaseMessageBean.dart';
-import 'package:yf_code/enum/FileStateType.dart';
+import 'package:yf_code/enum/FileTransferState.dart';
 import 'package:yf_code/enum/MessageType.dart';
 
 /// type : "file"
@@ -36,7 +36,7 @@ class SendFileBean extends Message {
   }
 
   final String type = MessageType.file.code;
-  final String state = FileStateType.send.code;
+  final String state = FileTransferState.send.code;
 
   /// 传输 id
   String? transferId;

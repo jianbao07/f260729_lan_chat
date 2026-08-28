@@ -14,10 +14,10 @@ class MulticastLock {
     if (!Platform.isAndroid) return true;
     try {
       final held = await _api.acquire();
-      dLog("MulticastLock.acquire => $held");
+      dLog("获得广播/组播锁 => $held");
       return held;
     } catch (e) {
-      dLog("MulticastLock.acquire failed: $e");
+      dLog("获得广播/组播锁失败: $e");
       return false;
     }
   }
@@ -26,9 +26,9 @@ class MulticastLock {
     if (!Platform.isAndroid) return;
     try {
       await _api.release();
-      dLog("MulticastLock.release");
+      dLog("释放广播/组播锁");
     } catch (e) {
-      dLog("MulticastLock.release failed: $e");
+      dLog("释放广播/组播锁失败: $e");
     }
   }
 }

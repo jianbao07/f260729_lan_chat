@@ -46,28 +46,28 @@ class MessageModel extends ChangeNotifier {
     }
   }
 
-  void updateFileState(
-    String transferId,
-    FileTransferState state, {
-    String? receiverLocalPath,
-  }) {
-    final display = _fileDisplays[transferId];
-    if (display == null) return;
-    display.setFileState(state);
-    if (receiverLocalPath != null) {
-      display.receiverLocalPath = receiverLocalPath;
-    }
-    notifyListeners();
-  }
-
-  void updateFileProgress(
+  void updateFile(
     String transferId, {
+    FileTransferState? state,
+    String? receiverLocalPath,
     int? current,
     int? total,
   }) {
     final display = _fileDisplays[transferId];
     if (display == null) return;
-    display.updateProgress(current: current, total: total);
+    if (state != null) display.setFileState(state);
+    if (receiverLocalPath != null) {
+      display.receiverLocalPath = receiverLocalPath;
+    }
+    final hasProgress = current != null || total != null;
+    if (hasProgress) {
+      display.updateProgress(current: current, total: total);
+    }
+    if (state != null || receiverLocalPath != null) {
+      notifyListeners();
+      return;
+    }
+    if (!hasProgress) return;
     final now = DateTime.now().millisecondsSinceEpoch;
     final t = display.total ?? 0;
     final done = t > 0 && display.current >= t;

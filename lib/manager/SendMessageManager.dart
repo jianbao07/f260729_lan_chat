@@ -6,6 +6,7 @@ import 'package:yf_code/bean/AckFileBean.dart';
 import 'package:yf_code/bean/CmdAckBean.dart';
 import 'package:yf_code/bean/BaseMessageBean.dart';
 import 'package:yf_code/bean/ReplySendFileBean.dart';
+import 'package:yf_code/bean/FileTransferRecord.dart';
 import 'package:yf_code/bean/SendFileBean.dart';
 import 'package:yf_code/bean/TextMessageBean.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
@@ -28,20 +29,24 @@ class SendMessageManager {
       iLog("不支持的消息类型，无法发送");
       return;
     }
-    String? savedSenderPath;
-    String? savedReceiverPath;
+    FileTransferRecord? savedSenderTransfer;
+    FileTransferRecord? savedReceiverTransfer;
+    String? savedAckReceiverPath;
     if (message is SendFileBean) {
-      savedSenderPath = message.senderLocalPath;
-      message.senderLocalPath = null;
+      savedSenderTransfer = message.senderTransfer;
+      savedReceiverTransfer = message.receiverTransfer;
+      message.senderTransfer = null;
+      message.receiverTransfer = null;
     } else if (message is AckFileBean) {
-      savedReceiverPath = message.receiverLocalPath;
+      savedAckReceiverPath = message.receiverLocalPath;
       message.receiverLocalPath = null;
     }
     final payload = jsonEncode(message.toJson());
     if (message is SendFileBean) {
-      message.senderLocalPath = savedSenderPath;
+      message.senderTransfer = savedSenderTransfer;
+      message.receiverTransfer = savedReceiverTransfer;
     } else if (message is AckFileBean) {
-      message.receiverLocalPath = savedReceiverPath;
+      message.receiverLocalPath = savedAckReceiverPath;
     }
     final payloadUint8 = utf8.encode(payload);
     if (payloadUint8.lengthInBytes > MAX_SIZE) {
@@ -97,15 +102,18 @@ class SendMessageManager {
       case FileTransferState.send:
         final msg = SendFileBean.fromJson(json);
         FileTransferManager.onOffer(msg, ip);
+        MessageManager.onMessageReceived(msg);
         break;
       case FileTransferState.rejected:
       case FileTransferState.transferring:
         final msg = ReplySendFileBean.fromJson(json);
+        MessageManager.onMessageReceived(msg);
         FileTransferManager.onReply(msg, ip);
         break;
       case FileTransferState.success:
       case FileTransferState.failed:
         final msg = AckFileBean.fromJson(json);
+        MessageManager.onMessageReceived(msg);
         FileTransferManager.onAck(msg);
         break;
       case null:

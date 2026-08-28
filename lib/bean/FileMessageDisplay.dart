@@ -33,7 +33,7 @@ class FileMessageDisplay implements MessageDisplay {
   String? get name => offer?.name;
   String? get mimeType => offer?.mimeType;
   int? get totalSize => total ?? offer?.totalSize;
-  String? get senderLocalPath => offer?.senderLocalPath;
+  String? get senderLocalPath => offer?.senderTransfer?.localPath;
   String? get localPath => receiverLocalPath ?? senderLocalPath;
 
   /// 0.0–1.0；总大小未知时返回 null，UI 可走不确定进度。

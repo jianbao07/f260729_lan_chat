@@ -1,4 +1,5 @@
 import 'package:yf_code/bean/BaseMessageBean.dart';
+import 'package:yf_code/bean/FileTransferRecord.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
 import 'package:yf_code/enum/MessageType.dart';
 
@@ -11,7 +12,8 @@ import 'package:yf_code/enum/MessageType.dart';
 /// total_size : 15728640
 /// sha256 : "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 /// port : 8080
-/// sender_local_path : "/storage/emulated/0/..../新建文本文件.txt"
+/// sender_transfer : {"transfer_id":"xxx","state":"send","is_sender":true,"local_path":"/storage/emulated/0/..../新建文本文件.txt"}
+/// receiver_transfer : {"transfer_id":"xxx","state":"send","is_sender":false,"local_path":"/storage/emulated/0/..../新建文本文件.txt"}
 
 class SendFileBean extends Message {
   SendFileBean({
@@ -21,7 +23,8 @@ class SendFileBean extends Message {
     this.totalSize,
     this.sha256,
     this.port,
-    this.senderLocalPath,
+    this.senderTransfer,
+    this.receiverTransfer,
   });
 
   SendFileBean.fromJson(dynamic json) {
@@ -32,7 +35,12 @@ class SendFileBean extends Message {
     totalSize = json['total_size'];
     sha256 = json['sha256'];
     port = json['port'];
-    senderLocalPath = json['sender_local_path'];
+    senderTransfer = json['sender_transfer'] != null
+        ? FileTransferRecord.fromJson(json['sender_transfer'])
+        : null;
+    receiverTransfer = json['receiver_transfer'] != null
+        ? FileTransferRecord.fromJson(json['receiver_transfer'])
+        : null;
   }
 
   final String type = MessageType.file.code;
@@ -46,8 +54,11 @@ class SendFileBean extends Message {
   String? sha256;
   int? port;
 
-  /// 发送者本地文件路径（由发送者赋值；网络发送时为空）
-  String? senderLocalPath;
+  /// 发送者文件传输状态（由发送者赋值；网络发送时为空）
+  FileTransferRecord? senderTransfer;
+
+  /// 接收者文件传输状态（由接收者赋值；网络发送时为空）
+  FileTransferRecord? receiverTransfer;
 
   @override
   Map<String, dynamic> toJson() {
@@ -63,7 +74,12 @@ class SendFileBean extends Message {
     map['total_size'] = totalSize;
     map['sha256'] = sha256;
     map['port'] = port;
-    map['sender_local_path'] = senderLocalPath;
+    if (senderTransfer != null) {
+      map['sender_transfer'] = senderTransfer?.toJson();
+    }
+    if (receiverTransfer != null) {
+      map['receiver_transfer'] = receiverTransfer?.toJson();
+    }
     return map;
   }
 }

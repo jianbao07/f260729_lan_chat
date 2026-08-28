@@ -14,6 +14,7 @@ import 'package:yf_code/utils/log.dart';
 class OnlineDeviceManager {
   OnlineDeviceManager._();
   static const int _LISTENER_PORT = 54832;
+  static const String _MULTICAST_GROUP = '239.255.255.1';
 
   static Timer? _beatTimer;
   static RawDatagramSocket? _beatSocket;
@@ -21,7 +22,7 @@ class OnlineDeviceManager {
   static String? _myIP;
   static Map<String,DeviceBean> _deviceList={};
 
-  static void onBeat(CmdBeatBean b,String ip,int port){
+  static void _onBeat(CmdBeatBean b,String ip,int port){
     final key=b.deviceId??ip;
     final d=_deviceList[key];
     if(d==null){
@@ -50,15 +51,16 @@ class OnlineDeviceManager {
 
   static void startBeat() async {
     _myIP=await NetworkUtils.getWifiIP();
-    final broadcastAddress = await NetworkUtils.getBroadcastAddress();
-    iLog("启动心跳,ip地址=$_myIP,广播地址=$broadcastAddress");
-    if (broadcastAddress == null) return;
+    // final broadcastAddress = await NetworkUtils.getBroadcastAddress();
+    // iLog("启动心跳,ip地址=$_myIP,广播地址=$broadcastAddress");
+    // if (broadcastAddress == null) return;
+    iLog("启动心跳,ip地址=$_myIP,组播地址=$_MULTICAST_GROUP");
 
     _beatTimer?.cancel();
     _beatSocket?.close();
 
     final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
-    socket.broadcastEnabled = true;
+    // socket.broadcastEnabled = true;
     _beatSocket = socket;
 
     void sendBeat() async{
@@ -66,9 +68,14 @@ class OnlineDeviceManager {
       dLog("自心跳-${_myIP}-${now.toLocal()}");
       final b=CmdBeatBean(name: InitManager.deviceName??_myIP,type: RawMessageType.beat.code,timestampUtc: now.toUtc().millisecondsSinceEpoch,deviceId: InitManager.deviceId);
       final payload = jsonEncode(b.toJson());
+      // socket.send(
+      //   utf8.encode(payload),
+      //   InternetAddress(broadcastAddress),
+      //   _LISTENER_PORT,
+      // );
       socket.send(
         utf8.encode(payload),
-        InternetAddress(broadcastAddress),
+        InternetAddress(_MULTICAST_GROUP),
         _LISTENER_PORT,
       );
     }
@@ -82,7 +89,8 @@ class OnlineDeviceManager {
 
     final locked = await MulticastLock.acquire();
     if (!locked) {
-      iLog("MulticastLock 获取失败，UDP广播可能无法接收");
+      // iLog("MulticastLock 获取失败，UDP广播可能无法接收");
+      iLog("MulticastLock 获取失败，UDP组播可能无法接收");
     }
 
     final socket = await RawDatagramSocket.bind(
@@ -90,9 +98,28 @@ class OnlineDeviceManager {
       _LISTENER_PORT,
       reuseAddress: true,
     );
-    socket.broadcastEnabled = true;
+    // socket.broadcastEnabled = true;
+    final localIp = await NetworkUtils.getWifiIP();
+    if (localIp != null) {
+      final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4, includeLinkLocal: false);
+      NetworkInterface? wifiInterface;
+      for (final ni in interfaces) {
+        if (ni.addresses.any((a) => a.address == localIp)) {
+          wifiInterface = ni;
+          break;
+        }
+      }
+      if (wifiInterface != null) {
+        socket.joinMulticast(InternetAddress(_MULTICAST_GROUP), wifiInterface);
+      } else {
+        socket.joinMulticast(InternetAddress(_MULTICAST_GROUP));
+      }
+    } else {
+      socket.joinMulticast(InternetAddress(_MULTICAST_GROUP));
+    }
     _listenerSocket = socket;
-    iLog("开始监听心跳端口=$_LISTENER_PORT");
+    // iLog("开始监听心跳端口=$_LISTENER_PORT");
+    iLog("开始监听心跳端口=$_LISTENER_PORT,组播组=$_MULTICAST_GROUP");
 
     socket.listen((event) {
       if (event != RawSocketEvent.read) return;
@@ -109,7 +136,7 @@ class OnlineDeviceManager {
         final text = utf8.decode(datagram.data);
         final json = jsonDecode(text) as Map<String, dynamic>;
         final b=CmdBeatBean.fromJson(json);
-        onBeat(b,ip,port);
+        _onBeat(b,ip,port);
         final time=DateTime.fromMillisecondsSinceEpoch(b.timestampUtc?.toInt()??0,isUtc: true);
         dLog(
           "收到心跳 from=${ip}:${port} "

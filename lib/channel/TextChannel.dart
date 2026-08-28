@@ -52,6 +52,7 @@ class TextChannel {
     iLog("开始监听文本消息=$_MESSAGE_PORT");
     server.listen((client) {
       final ip = client.remoteAddress.address;
+      iLog("收到连接-ip=${ip}");
       _putConnect(ip, client);
       _listenSocket(client, ip);
     }, onError: (e) {

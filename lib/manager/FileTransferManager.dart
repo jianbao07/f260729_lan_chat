@@ -23,46 +23,12 @@ class FileTransferManager {
 
   static final Map<String, FileTransferSession> _sessions = {};
 
-  /// 按 [transfer_id] 记录文件传输状态（会话结束后仍可查询）。
-  static final Map<String, FileTransferRecord> _records = {};
-
   /// 用于在无 BuildContext 的信令回调里弹接收对话框。
   static GlobalKey<NavigatorState>? navigatorKey;
 
   static const Duration replyTimeout = Duration(seconds: 60);
 
   static FileTransferSession? get(String transferId) => _sessions[transferId];
-
-  /// 查询指定 [transferId] 的传输状态。
-  static FileTransferRecord? getRecord(String transferId) =>
-      _records[transferId];
-
-  static void _upsertRecord(
-    String transferId, {
-    bool? isSender,
-    FileTransferState? state,
-    int? current,
-    int? total,
-    String? errorMessage,
-  }) {
-    final existing = _records[transferId];
-    if (existing == null) {
-      _records[transferId] = FileTransferRecord(
-        transferId: transferId,
-        isSender: isSender,
-        state: state?.code,
-        current: current,
-        total: total,
-        errorMessage: errorMessage,
-      );
-      return;
-    }
-    if (isSender != null) existing.isSender = isSender;
-    if (state != null) existing.state = state.code;
-    if (current != null) existing.current = current;
-    if (total != null) existing.total = total;
-    if (errorMessage != null) existing.errorMessage = errorMessage;
-  }
 
   static String _newTransferId() {
     return '${InitManager.deviceId ?? "dev"}-${DateTime.now().microsecondsSinceEpoch}';
@@ -75,24 +41,14 @@ class FileTransferManager {
     final server = await tcp.startSendFile(
       file,
       onProgress: (current, total) {
-        _upsertRecord(
-          transferId,
-          state: FileTransferState.transferring,
-          current: current,
-          total: total,
-        );
-        MessageManager.updateFileProgress(
+        MessageManager.updateFile(
           transferId,
           current: current,
           total: total,
         );
       },
       onSendFailed: (errorMsg) {
-        _upsertRecord(
-          transferId,
-          state: FileTransferState.failed,
-          errorMessage: errorMsg,
-        );
+        MessageManager.updateFile(transferId, state: FileTransferState.failed, errorMsg: errorMsg);
       },
     );
     final name = FileUtils.fileNameOf(file);
@@ -124,13 +80,6 @@ class FileTransferManager {
       server: server,
     );
     _sessions[transferId] = session;
-    _upsertRecord(
-      transferId,
-      isSender: true,
-      state: FileTransferState.send,
-      current: 0,
-      total: totalSize,
-    );
 
     session.replyTimeout = Timer(replyTimeout, () {
       iLog("等待接收方回复超时 transferId=$transferId");
@@ -138,8 +87,7 @@ class FileTransferManager {
     });
 
     await SendMessageManager.sendMessage(bean, ip, deviceId);
-    // 发送后再写本地路径，保证上线 toJson 时字段为空
-    bean.senderLocalPath = localPath;
+    MessageManager.updateFile(transferId, state: FileTransferState.send, localPath: localPath);
     iLog("已发送文件 offer transferId=$transferId port=$port");
   }
 
@@ -169,15 +117,6 @@ class FileTransferManager {
       offerMessage: offer,
     );
     _sessions[transferId] = session;
-    _upsertRecord(
-      transferId,
-      isSender: false,
-      state: FileTransferState.send,
-      current: 0,
-      total: offer.totalSize,
-    );
-
-    MessageManager.onMessageReceived(offer);
     _showReceiveDialog(transferId);
   }
 
@@ -208,12 +147,13 @@ class FileTransferManager {
     final state = FileTransferState.fromCode(reply.state ?? '');
     session.replyTimeout?.cancel();
     session.replyTimeout = null;
+    if(reply.transferId!=null){
+      MessageManager.updateFile(reply.transferId!, state: state);
+    }
 
     if (state == FileTransferState.rejected) {
       iLog("对方拒绝接收 transferId=$transferId");
       session.state = FileTransferState.rejected;
-      _upsertRecord(transferId, state: FileTransferState.rejected);
-      MessageManager.applyFileReply(reply);
       await session.closeServer();
       _sessions.remove(transferId);
       return;
@@ -222,8 +162,6 @@ class FileTransferManager {
     if (state == FileTransferState.transferring) {
       iLog("对方同意接收，等待 TCP 连接 transferId=$transferId");
       session.state = FileTransferState.transferring;
-      _upsertRecord(transferId, state: FileTransferState.transferring);
-      MessageManager.applyFileReply(reply);
       // TCP 继续等待对方 connect
       return;
     }
@@ -243,21 +181,15 @@ class FileTransferManager {
     }
 
     final state = FileTransferState.fromCode(ack.state ?? '');
+    if(state!=null){
+      MessageManager.updateFile(transferId, state: state);
+    }
     if (state == FileTransferState.success) {
       iLog("文件传输成功 ack transferId=$transferId");
       session.state = FileTransferState.success;
-      _upsertRecord(
-        transferId,
-        state: FileTransferState.success,
-        current: session.totalSize,
-        total: session.totalSize,
-      );
-      MessageManager.applyFileAck(ack);
     } else if (state == FileTransferState.failed) {
       iLog("文件传输失败 ack transferId=$transferId");
       session.state = FileTransferState.failed;
-      _upsertRecord(transferId, state: FileTransferState.failed);
-      MessageManager.updateFileState(transferId, FileTransferState.failed);
     } else {
       iLog("忽略未知文件 ack state=${ack.state}");
       return;
@@ -283,8 +215,7 @@ class FileTransferManager {
     }
 
     session.state = FileTransferState.transferring;
-    _upsertRecord(transferId, state: FileTransferState.transferring);
-    MessageManager.updateFileState(transferId, FileTransferState.transferring);
+    MessageManager.updateFile(transferId, state: FileTransferState.transferring);
     final reply = ReplySendFileBean.buildAccept(offer);
     await SendMessageManager.sendMessage(
       reply,
@@ -307,60 +238,41 @@ class FileTransferManager {
         totalSize: session.totalSize ?? 0,
         name: session.name,
         onProgress: (current, total) {
-          _upsertRecord(
-            transferId,
-            state: FileTransferState.transferring,
-            current: current,
-            total: total,
-          );
-          MessageManager.updateFileProgress(
+          MessageManager.updateFile(
             transferId,
             current: current,
             total: total,
           );
         },
         onReceiveFailed: (errorMsg) {
-          _upsertRecord(
-            transferId,
-            state: FileTransferState.failed,
-            errorMessage: errorMsg,
-          );
+          MessageManager.updateFile(transferId, state: FileTransferState.failed, errorMsg: errorMsg);
         },
       );
       session.state = FileTransferState.success;
-      _upsertRecord(
-        transferId,
-        state: FileTransferState.success,
-        current: session.totalSize,
-        total: session.totalSize,
-      );
+      offer.receiverTransfer ??= FileTransferRecord(transferId: transferId, isSender: false);
+      offer.receiverTransfer!.localPath = path;
       final ack = AckFileBean.buildSuccess(offer, receiverLocalPath: path);
       await SendMessageManager.sendMessage(
         ack,
         session.peerIp,
         session.peerDeviceId,
       );
-      MessageManager.updateFileState(
+      MessageManager.updateFile(
         transferId,
-        FileTransferState.success,
+        state: FileTransferState.success,
         receiverLocalPath: path,
       );
       iLog("接收完成并已发送 ack transferId=$transferId path=$path");
     } catch (e) {
       iLog("接收失败 transferId=$transferId: $e");
       session.state = FileTransferState.failed;
-      _upsertRecord(
-        transferId,
-        state: FileTransferState.failed,
-        errorMessage: '$e',
-      );
       final ack = AckFileBean.buildFailed(offer);
       await SendMessageManager.sendMessage(
         ack,
         session.peerIp,
         session.peerDeviceId,
       );
-      MessageManager.updateFileState(transferId, FileTransferState.failed);
+      MessageManager.updateFile(transferId, state: FileTransferState.failed);
     } finally {
       _sessions.remove(transferId);
     }
@@ -380,8 +292,7 @@ class FileTransferManager {
     }
 
     session.state = FileTransferState.rejected;
-    _upsertRecord(transferId, state: FileTransferState.rejected);
-    MessageManager.updateFileState(transferId, FileTransferState.rejected);
+    MessageManager.updateFile(transferId, state: FileTransferState.rejected);
     final reply = ReplySendFileBean.buildRejected(offer);
     await SendMessageManager.sendMessage(
       reply,
@@ -396,8 +307,7 @@ class FileTransferManager {
   static Future<void> cancel(String transferId) async {
     final session = _sessions.remove(transferId);
     if (session == null) return;
-    _upsertRecord(transferId, state: FileTransferState.failed);
-    MessageManager.updateFileState(transferId, FileTransferState.failed);
+    MessageManager.updateFile(transferId, state: FileTransferState.failed);
     await session.closeServer();
     iLog("已取消文件传输 transferId=$transferId");
   }

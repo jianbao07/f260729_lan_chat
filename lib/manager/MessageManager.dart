@@ -30,6 +30,7 @@ class MessageManager {
 
   /// 回调发了哪些消息
   static void onMessageSent(Message message, String ip, String? deviceId) {
+    message.base?.isSender=true;
     _addMessage(message);
 
     final fromMessageId = message.base?.fromMessageId;
@@ -61,7 +62,7 @@ class MessageManager {
           sendingMessages.remove(fromMessageId);
           timer.cancel();
           _ackTimers.remove(fromMessageId);
-          _notifySession(message.base?.sessionId);
+          sessionMessageModels[message.base?.sessionId]?.onChangeMessage(message);
         }
       },
     );
@@ -69,6 +70,7 @@ class MessageManager {
 
   /// 回调收到了哪些消息
   static void onMessageReceived(Message message) {
+    message.base?.isSender=false;
     _addMessage(message);
   }
 
@@ -81,26 +83,6 @@ class MessageManager {
     int? current,
     int? total,
   }) {
-    _applySenderTransfer(transferId, state: state, errorMsg: errorMsg, localPath: localPath, current: current, total: total);
-    final sessionId = _transferSessionIds[transferId];
-    if (sessionId == null) return;
-    sessionMessageModels[sessionId]?.updateFile(
-      transferId,
-      state: state,
-      receiverLocalPath: receiverLocalPath,
-      current: current,
-      total: total,
-    );
-  }
-
-  static SendFileBean? _findSendFile(String transferId) {
-    for (final message in historyMessages) {
-      if (message is SendFileBean && message.transferId == transferId) return message;
-    }
-    return null;
-  }
-
-  static void _applySenderTransfer(String transferId, {FileTransferState? state, String? errorMsg, String? localPath, int? current, int? total}) {
     final offer = _findSendFile(transferId);
     if (offer == null) return;
     if (offer.base?.fromDeviceId != InitManager.deviceId) return;
@@ -111,6 +93,17 @@ class MessageManager {
     if (localPath != null) record.localPath = localPath;
     if (current != null) record.current = current;
     if (total != null) record.total = total;
+
+    final sessionId = _transferSessionIds[transferId];
+    if (sessionId == null) return;
+    sessionMessageModels[sessionId]?.onChangeMessage(offer);
+  }
+
+  static SendFileBean? _findSendFile(String transferId) {
+    for (final message in historyMessages) {
+      if (message is SendFileBean && message.transferId == transferId) return message;
+    }
+    return null;
   }
 
   static void _addMessage(Message message) {
@@ -142,11 +135,6 @@ class MessageManager {
     return false;
   }
 
-  static void _notifySession(String? sessionId) {
-    if (sessionId == null) return;
-    sessionMessageModels[sessionId]?.notifyUpdated();
-  }
-
   static MessageModel? _getSessionModel(Message message) {
     final sessionId = message.base?.sessionId ??
         _sessionIdOfTransfer(_transferIdOf(message));
@@ -170,8 +158,7 @@ class MessageManager {
     message.base?.state = MessageStateType.success.code;
     message.base?.successTimestampUtc =
         DateTime.now().toUtc().millisecondsSinceEpoch;
-
-    _notifySession(message.base?.sessionId);
+    sessionMessageModels[message.base?.sessionId]?.onChangeMessage(message);
   }
 
   static String? _transferIdOf(Message message) {

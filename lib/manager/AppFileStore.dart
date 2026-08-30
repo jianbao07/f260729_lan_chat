@@ -1,28 +1,27 @@
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
-import 'package:yf_code/utils/FileUtils.dart';
 
 /// 应用私有文件仓库：接收落地；发送时仅在无法直接访问原路径时才拷入应用目录。
 class AppFileStore {
   AppFileStore._();
 
-  static const _incoming = 'incoming';
-  static const _outgoing = 'outgoing';
+  static const _downloadsDir = 'Downloads';
+  static const _sendFileDir = 'SendFile';
 
   static Directory? _root;
 
   /// 接收文件的本地保存路径。同一 [transferId] 重复调用返回同一路径，便于续传。
-  static Future<String> pathForIncoming({required String transferId, String? name}) async {
-    final dir = await _subdir(
-      '$_incoming${Platform.pathSeparator}${_safeName(transferId, 'transfer')}',
+  static Future<String> generateDownloadPath({required String transferId, String? name}) async {
+    final dir = await _createDir(
+      '$_downloadsDir${Platform.pathSeparator}${_safeName(transferId, 'transfer')}',
     );
     final fileName = _safeName(name, transferId);
     return '${dir.path}${Platform.pathSeparator}$fileName';
   }
 
   /// 原路径可直接读写时原样返回，否则把内容写入应用目录。
-  static Future<File> importOutgoing({required String name, String? sourcePath, Stream<List<int>> Function()? openContent}) async {
+  static Future<File> ensureAccessiblePath({required String name, String? sourcePath, Stream<List<int>> Function()? openContent}) async {
     if (await canAccessDirectly(sourcePath)) {
       return File(sourcePath!);
     }
@@ -30,7 +29,7 @@ class AppFileStore {
     if (content == null) {
       throw StateError('无法直接访问所选文件，且未提供可读内容');
     }
-    final dir = await _subdir(_outgoing);
+    final dir = await _createDir(_sendFileDir);
     final fileName = _safeName(name, 'file');
     final stamp = DateTime.now().microsecondsSinceEpoch;
     final dest = File(
@@ -43,15 +42,6 @@ class AppFileStore {
       await sink.close();
     }
     return dest;
-  }
-
-  /// 已有本地文件：可直接访问则返回原文件，否则拷入应用目录。
-  static Future<File> importOutgoingFile(File source, {String? name}) {
-    return importOutgoing(
-      name: name ?? FileUtils.fileNameOf(source),
-      sourcePath: source.path,
-      openContent: source.openRead,
-    );
   }
 
   /// 是否能直接按路径打开应用外（或任意本地）文件。
@@ -73,7 +63,7 @@ class AppFileStore {
     }
   }
 
-  static Future<Directory> _ensureRoot() async {
+  static Future<Directory> _initRootDir() async {
     final cached = _root;
     if (cached != null) return cached;
     final support = await getApplicationSupportDirectory();
@@ -85,8 +75,8 @@ class AppFileStore {
     return root;
   }
 
-  static Future<Directory> _subdir(String name) async {
-    final root = await _ensureRoot();
+  static Future<Directory> _createDir(String name) async {
+    final root = await _initRootDir();
     final dir = Directory('${root.path}${Platform.pathSeparator}$name');
     if (!await dir.exists()) {
       await dir.create(recursive: true);

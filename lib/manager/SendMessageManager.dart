@@ -59,7 +59,6 @@ class SendMessageManager {
     }
   }
 
-  /// 兼容旧调用：转发到 [FileTransferManager.offer]。
   static Future<void> sendFile(File file, String ip, String? deviceId) async {
     await FileTransferManager.offer(file, ip, deviceId);
   }

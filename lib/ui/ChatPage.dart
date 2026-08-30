@@ -6,8 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:yf_code/InitManager.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
-import 'package:yf_code/bean/FileMessageDisplay.dart';
-import 'package:yf_code/bean/MessageDisplay.dart';
 import 'package:yf_code/bean/TextMessageBean.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
 import 'package:yf_code/enum/MessageStateType.dart';
@@ -15,7 +13,11 @@ import 'package:yf_code/manager/AppFileStore.dart';
 import 'package:yf_code/manager/FileTransferManager.dart';
 import 'package:yf_code/manager/MessageManager.dart';
 import 'package:yf_code/manager/SendMessageManager.dart';
+import 'package:yf_code/model/IMessage/FileMessageDisplay.dart';
+import 'package:yf_code/model/IMessage/IMessageDisplay.dart';
+import 'package:yf_code/model/IMessage/TextMessageDisplay.dart';
 import 'package:yf_code/model/MessageModel.dart';
+import 'package:yf_code/utils/log.dart';
 import 'package:yf_code/utils/page.dart';
 
 class ChatPage extends StatefulWidget {
@@ -137,7 +139,7 @@ class _ChatPageState extends State<ChatPage> {
       }
 
       setState(() => _sending = true);
-      final local = await AppFileStore.importOutgoing(
+      final local = await AppFileStore.ensureAccessiblePath(
         name: name,
         sourcePath: picked.path.isEmpty ? null : picked.path,
         openContent: picked.openRead,
@@ -213,6 +215,9 @@ class _ChatPageState extends State<ChatPage> {
         return;
       case FileTransferState.success:
         break;
+      case null:
+        iLog("状态为空");
+        break;
     }
 
     final path = file.localPath;
@@ -279,7 +284,7 @@ class _ChatPageState extends State<ChatPage> {
                               message: msg,
                               myDeviceId: InitManager.deviceId,
                               fileActionBusy: msg is FileMessageDisplay &&
-                                  _fileActionBusy.contains(msg.transferId),
+                                  _fileActionBusy.contains(msg.fileMessage.transferId),
                               onAcceptFile: _acceptFile,
                               onRejectFile: _rejectFile,
                               onFileTap: _onFileTap,
@@ -467,21 +472,21 @@ class _MessageBubble extends StatelessWidget {
     required this.onFileTap,
   });
 
-  final MessageDisplay message;
+  final IMessageDisplay message;
   final String? myDeviceId;
   final bool fileActionBusy;
   final ValueChanged<String> onAcceptFile;
   final ValueChanged<String> onRejectFile;
   final void Function(FileMessageDisplay file, {required bool mine}) onFileTap;
 
-  bool get _isMine => message.base?.fromDeviceId == myDeviceId;
+  bool get _isMine => message.baseMessage?.base?.fromDeviceId == myDeviceId;
 
   MessageStateType get _deliveryState =>
-      MessageStateType.fromCode(message.base?.state ?? '') ??
+      MessageStateType.fromCode(message.baseMessage?.base?.state ?? '') ??
       MessageStateType.sending;
 
   DateTime get _timestamp {
-    final utc = message.base?.sendTimestampUtc;
+    final utc = message.baseMessage?.base?.sendTimestampUtc;
     if (utc == null) return DateTime.now();
     return DateTime.fromMillisecondsSinceEpoch(utc.toInt(), isUtc: true)
         .toLocal();
@@ -540,9 +545,9 @@ class _MessageBubble extends StatelessWidget {
                             mine: mine,
                           ),
                           onAccept: () => onAcceptFile(
-                              (message as FileMessageDisplay).transferId),
+                              (message as FileMessageDisplay).fileMessage.transferId!),
                           onReject: () => onRejectFile(
-                              (message as FileMessageDisplay).transferId),
+                              (message as FileMessageDisplay).fileMessage.transferId!),
                         )
                       : Padding(
                           padding: const EdgeInsets.symmetric(
@@ -550,8 +555,8 @@ class _MessageBubble extends StatelessWidget {
                             vertical: 10,
                           ),
                           child: SelectableText(
-                            message is TextMessageBean
-                                ? ((message as TextMessageBean).text ?? '')
+                            message is TextMessageDisplay
+                                ? ((message as TextMessageDisplay).textMessage.text ?? '')
                                 : '',
                             cursorColor: mine
                                 ? Colors.white
@@ -659,6 +664,8 @@ class _FileBubbleBody extends StatelessWidget {
         return mine ? const Color(0xFFFFC4B8) : const Color(0xFFC45C4A);
       case FileTransferState.failed:
         return mine ? const Color(0xFFFFC4B8) : const Color(0xFFC45C4A);
+      case null:
+        throw UnimplementedError();
     }
   }
 
@@ -742,7 +749,7 @@ class _FileBubbleBody extends StatelessWidget {
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
-                            stateLabel(file.fileState, mine: mine),
+                            stateLabel(file.fileState!, mine: mine),
                             style: TextStyle(
                               fontSize: 11.5,
                               fontWeight: FontWeight.w600,

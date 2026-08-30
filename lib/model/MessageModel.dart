@@ -1,124 +1,42 @@
 import 'package:flutter/cupertino.dart';
-import 'package:yf_code/bean/AckFileBean.dart';
 import 'package:yf_code/bean/BaseMessageBean.dart';
-import 'package:yf_code/bean/FileMessageDisplay.dart';
-import 'package:yf_code/bean/MessageDisplay.dart';
-import 'package:yf_code/bean/ReplySendFileBean.dart';
 import 'package:yf_code/bean/SendFileBean.dart';
-import 'package:yf_code/enum/FileTransferState.dart';
+import 'package:yf_code/bean/TextMessageBean.dart';
+import 'package:yf_code/model/IMessage/FileMessageDisplay.dart';
+import 'package:yf_code/model/IMessage/IMessageDisplay.dart';
+import 'package:yf_code/model/IMessage/TextMessageDisplay.dart';
 
 class MessageModel extends ChangeNotifier {
   MessageModel(this.sessionId, List<Message> historyMessages) {
-    for (final message in historyMessages) {
-      _ingest(message, notify: false);
+    for (var item in historyMessages) {
+      _ingest(item);
     }
   }
 
   String sessionId;
-  final List<MessageDisplay> _historyMessages = [];
-  final Map<String, FileMessageDisplay> _fileDisplays = {};
-  final Map<String, int> _lastProgressNotifyMs = {};
+  final List<IMessageDisplay> _messageList = [];
 
-  List<MessageDisplay> get messages => List.unmodifiable(_historyMessages);
+  List<IMessageDisplay> get messages => List.unmodifiable(_messageList);
 
-  /// 将协议 [Message] 转为 [MessageDisplay] 并入列。
-  /// 文本直接入列；文件多条信令聚合为一条 [FileMessageDisplay]。
   void addMessage(Message message) {
-    _ingest(message, notify: true);
+    _ingest(message);
+    notifyListeners();
   }
 
-  void _ingest(Message message, {required bool notify}) {
+  void _ingest(Message message) {
     if (message is SendFileBean) {
-      _upsertFileOffer(message, notify: notify);
-      return;
-    }
-    if (message is ReplySendFileBean) {
-      _applyFileReply(message, notify: notify);
-      return;
-    }
-    if (message is AckFileBean) {
-      _applyFileAck(message, notify: notify);
-      return;
-    }
-    if (message is MessageDisplay) {
-      _historyMessages.add(message as MessageDisplay);
-      if (notify) notifyListeners();
+      final f=FileMessageDisplay(message);
+      _messageList.add(f);
+    } else if (message is TextMessageBean) {
+      final f=TextMessageDisplay(message);
+      _messageList.add(f);
+    }else{
+      // StateMessageDisplay(message);
     }
   }
 
-  void updateFile(
-    String transferId, {
-    FileTransferState? state,
-    String? receiverLocalPath,
-    int? current,
-    int? total,
-  }) {
-    final display = _fileDisplays[transferId];
-    if (display == null) return;
-    if (state != null) display.setFileState(state);
-    if (receiverLocalPath != null) {
-      display.receiverLocalPath = receiverLocalPath;
-    }
-    final hasProgress = current != null || total != null;
-    if (hasProgress) {
-      display.updateProgress(current: current, total: total);
-    }
-    if (state != null || receiverLocalPath != null) {
-      notifyListeners();
-      return;
-    }
-    if (!hasProgress) return;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final t = display.total ?? 0;
-    final done = t > 0 && display.current >= t;
-    final last = _lastProgressNotifyMs[transferId] ?? 0;
-    if (!done && now - last < 100) return;
-    _lastProgressNotifyMs[transferId] = now;
+  void onChangeMessage(Message message) {
+    // _messageList.find((item)=>message==item.getOriMessage());
     notifyListeners();
-  }
-
-  void notifyUpdated() {
-    notifyListeners();
-  }
-
-  void _upsertFileOffer(SendFileBean offer, {required bool notify}) {
-    final transferId = offer.transferId;
-    if (transferId == null || transferId.isEmpty) {
-      return;
-    }
-
-    final existing = _fileDisplays[transferId];
-    if (existing != null) {
-      existing.applyOffer(offer);
-      if (notify) notifyListeners();
-      return;
-    }
-
-    final display = FileMessageDisplay(
-      transferId: transferId,
-      fileState: FileTransferState.send,
-      offer: offer,
-    );
-    _fileDisplays[transferId] = display;
-    _historyMessages.add(display);
-    if (notify) notifyListeners();
-  }
-
-  void _applyFileReply(ReplySendFileBean reply, {required bool notify}) {
-    final transferId = reply.transferId;
-    if (transferId == null) return;
-    final display = _fileDisplays[transferId];
-    if (display == null) return;
-    display.applyReply(reply);
-    if (notify) notifyListeners();
-  }
-
-  void _applyFileAck(AckFileBean ack, {required bool notify}) {
-    final transferId = ack.transferId;
-    if (transferId == null) return;
-    final display = _fileDisplays[transferId];
-    if (display == null) return;
-    display.applyAck(ack);
-    if (notify) notifyListeners();
   }
 }

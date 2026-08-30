@@ -28,7 +28,28 @@ class FileTransferManager {
 
   static const Duration replyTimeout = Duration(seconds: 60);
 
+  /// 进度回调节流：同一 transfer 100ms 内最多刷新一次；完成（current >= total）立即刷新。
+  static const int _progressMinIntervalMs = 100;
+  static final Map<String, int> _lastProgressAtMs = {};
+
   static FileTransferSession? get(String transferId) => _sessions[transferId];
+
+  static FileTransferSession? _removeSession(String transferId) {
+    _lastProgressAtMs.remove(transferId);
+    return _sessions.remove(transferId);
+  }
+
+  static void _notifyProgress(String transferId, int current, int total) {
+    if (current < total) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final last = _lastProgressAtMs[transferId];
+      if (last != null && now - last < _progressMinIntervalMs) return;
+      _lastProgressAtMs[transferId] = now;
+    } else {
+      _lastProgressAtMs.remove(transferId);
+    }
+    MessageManager.updateFile(transferId, current: current, total: total);
+  }
 
   static String _newTransferId() {
     return '${InitManager.deviceId ?? "dev"}-${DateTime.now().microsecondsSinceEpoch}';
@@ -41,11 +62,7 @@ class FileTransferManager {
     final server = await tcp.startSendFile(
       file,
       onProgress: (current, total) {
-        MessageManager.updateFile(
-          transferId,
-          current: current,
-          total: total,
-        );
+        _notifyProgress(transferId, current, total);
       },
       onSendFailed: (errorMsg) {
         MessageManager.updateFile(transferId, state: FileTransferState.failed, errorMsg: errorMsg);
@@ -155,7 +172,7 @@ class FileTransferManager {
       iLog("对方拒绝接收 transferId=$transferId");
       session.state = FileTransferState.rejected;
       await session.closeServer();
-      _sessions.remove(transferId);
+      _removeSession(transferId);
       return;
     }
 
@@ -197,7 +214,7 @@ class FileTransferManager {
 
     session.replyTimeout?.cancel();
     await session.closeServer();
-    _sessions.remove(transferId);
+    _removeSession(transferId);
   }
 
   /// 接收方：同意接收。先发 Reply，再 connect。
@@ -224,7 +241,7 @@ class FileTransferManager {
     );
 
     final path = savePath ??
-        await AppFileStore.pathForIncoming(
+        await AppFileStore.generateDownloadPath(
           transferId: transferId,
           name: session.name,
         );
@@ -238,11 +255,7 @@ class FileTransferManager {
         totalSize: session.totalSize ?? 0,
         name: session.name,
         onProgress: (current, total) {
-          MessageManager.updateFile(
-            transferId,
-            current: current,
-            total: total,
-          );
+          _notifyProgress(transferId, current, total);
         },
         onReceiveFailed: (errorMsg) {
           MessageManager.updateFile(transferId, state: FileTransferState.failed, errorMsg: errorMsg);
@@ -274,7 +287,7 @@ class FileTransferManager {
       );
       MessageManager.updateFile(transferId, state: FileTransferState.failed);
     } finally {
-      _sessions.remove(transferId);
+      _removeSession(transferId);
     }
   }
 
@@ -287,7 +300,7 @@ class FileTransferManager {
     }
     final offer = session.offerMessage;
     if (offer == null) {
-      _sessions.remove(transferId);
+      _removeSession(transferId);
       return;
     }
 
@@ -299,13 +312,13 @@ class FileTransferManager {
       session.peerIp,
       session.peerDeviceId,
     );
-    _sessions.remove(transferId);
+    _removeSession(transferId);
     iLog("已拒绝接收 transferId=$transferId");
   }
 
   /// 取消会话（超时 / 主动取消）。
   static Future<void> cancel(String transferId) async {
-    final session = _sessions.remove(transferId);
+    final session = _removeSession(transferId);
     if (session == null) return;
     MessageManager.updateFile(transferId, state: FileTransferState.failed);
     await session.closeServer();

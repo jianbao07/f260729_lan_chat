@@ -9,6 +9,7 @@ import 'package:yf_code/enum/MessageStateType.dart';
 /// success_timestamp_utc : 1785173158277
 /// fail_timestamp_utc : 1785173158277
 /// state : "sending"
+/// is_sender : true
 
 class BaseMessageBean {
   BaseMessageBean({
@@ -20,7 +21,9 @@ class BaseMessageBean {
     this.sendTimestampUtc,
     this.successTimestampUtc,
     this.failTimestampUtc,
-    this.state,});
+    this.state,
+    this.isSender,
+  });
 
   BaseMessageBean.fromJson(dynamic json) {
     fromMessageId = json['from_message_id']?.toString();
@@ -32,6 +35,7 @@ class BaseMessageBean {
     successTimestampUtc = json['success_timestamp_utc'];
     failTimestampUtc = json['fail_timestamp_utc'];
     state = json['state'];
+    isSender = json['is_sender'];
   }
   String? fromMessageId;
   String? toMessageId;
@@ -42,6 +46,7 @@ class BaseMessageBean {
   num? successTimestampUtc;
   num? failTimestampUtc;
   String? state;
+  bool? isSender;
 
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{};
@@ -54,6 +59,7 @@ class BaseMessageBean {
     map['success_timestamp_utc'] = successTimestampUtc;
     map['fail_timestamp_utc'] = failTimestampUtc;
     map['state'] = state;
+    map['is_sender'] = isSender;
     return map;
   }
 
@@ -73,6 +79,7 @@ abstract class Message{
     base.sendTimestampUtc ??=
         DateTime.now().toUtc().millisecondsSinceEpoch;
     base.state ??= MessageStateType.sending.code;
+    base.isSender ??= true;
     this.base = base;
     return true;
   }

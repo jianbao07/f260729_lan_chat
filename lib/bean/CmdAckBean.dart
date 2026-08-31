@@ -1,22 +1,21 @@
 import 'package:yf_code/enum/MessageType.dart';
 
 /// type : "ack"
-/// from_message_id : "3"
+/// message_id : "3"
 
 class CmdAckBean {
-  CmdAckBean({
-      this.fromMessageId});
+  CmdAckBean({this.messageId});
 
   CmdAckBean.fromJson(dynamic json) {
-    fromMessageId = json['from_message_id']?.toString();
+    messageId = json['message_id']?.toString();
   }
   final String type = MessageType.rawAck.code;
-  String? fromMessageId;
+  String? messageId;
 
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{};
     map['type'] = type;
-    map['from_message_id'] = fromMessageId;
+    map['message_id'] = messageId;
     return map;
   }
 

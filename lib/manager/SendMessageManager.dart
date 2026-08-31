@@ -22,29 +22,24 @@ class SendMessageManager {
 
   static Future<void> sendMessage(Message message, String ip, String? deviceId, {bool resend = false,}) async {
     if (!resend) {
-      final fromMessageId = MessageManager.newFromMessageId();
-      message.initBase(InitManager.deviceId, deviceId, fromMessageId);
+      message.initBase(InitManager.deviceId, deviceId);
     }
     if (message.base == null) {
       iLog("不支持的消息类型，无法发送");
       return;
     }
-    FileTransferRecord? savedSenderTransfer;
-    FileTransferRecord? savedReceiverTransfer;
+    FileTransferRecord? savedTransferRecord;
     String? savedAckReceiverPath;
     if (message is SendFileBean) {
-      savedSenderTransfer = message.senderTransfer;
-      savedReceiverTransfer = message.receiverTransfer;
-      message.senderTransfer = null;
-      message.receiverTransfer = null;
+      savedTransferRecord = message.transferRecord;
+      message.transferRecord = null;
     } else if (message is AckFileBean) {
       savedAckReceiverPath = message.receiverLocalPath;
       message.receiverLocalPath = null;
     }
     final payload = jsonEncode(message.toJson());
     if (message is SendFileBean) {
-      message.senderTransfer = savedSenderTransfer;
-      message.receiverTransfer = savedReceiverTransfer;
+      message.transferRecord = savedTransferRecord;
     } else if (message is AckFileBean) {
       message.receiverLocalPath = savedAckReceiverPath;
     }
@@ -74,7 +69,7 @@ class SendMessageManager {
           final msg = TextMessageBean.fromJson(json);
           iLog("文本消息解析成功=${msg.text}");
           MessageManager.onMessageReceived(msg);
-          sendAckMessage(ip, msg.base?.fromMessageId);
+          sendAckMessage(ip, msg.messageId);
           break;
         case MessageType.rawAck:
           final msg = CmdAckBean.fromJson(json);
@@ -86,8 +81,7 @@ class SendMessageManager {
           break;
         case MessageType.file:
           _onFileMessage(json, ip);
-          final base = json['base'] as Map<String, dynamic>?;
-          sendAckMessage(ip, base?['from_message_id']?.toString());
+          sendAckMessage(ip, json['message_id']?.toString());
           break;
       }
     } catch (e) {
@@ -100,8 +94,8 @@ class SendMessageManager {
     switch (state) {
       case FileTransferState.send:
         final msg = SendFileBean.fromJson(json);
-        FileTransferManager.onOffer(msg, ip);
         MessageManager.onMessageReceived(msg);
+        FileTransferManager.onOffer(msg, ip);
         break;
       case FileTransferState.rejected:
       case FileTransferState.transferring:
@@ -121,8 +115,8 @@ class SendMessageManager {
     }
   }
 
-  static Future<void> sendAckMessage(String ip, String? fromMessageId) async {
-    final ack = CmdAckBean(fromMessageId: fromMessageId);
+  static Future<void> sendAckMessage(String ip, String? messageId) async {
+    final ack = CmdAckBean(messageId: messageId);
     final payload = jsonEncode(ack.toJson());
     final payloadUint8 = utf8.encode(payload);
     TextChannel.sendText(payload, payloadUint8, ip);

@@ -12,15 +12,14 @@ class FileMessageDisplay extends IMessageDisplay{
   String? get name => fileMessage.name;
   String? get mimeType => fileMessage.mimeType;
   int? get totalSize => fileMessage.totalSize;
-  FileTransferRecord? get transferRecord => fileMessage.base?.isSender==true?fileMessage.senderTransfer:fileMessage.receiverTransfer;
-  String? get localPath => transferRecord?.localPath;
-  FileTransferState? get fileState=>FileTransferState.fromCode(transferRecord?.state);
-  int? get current => transferRecord?.current;
-  int? get total => transferRecord?.total;
+  String? get localPath => fileMessage.transferRecord?.localPath;
+  FileTransferState? get fileState=>FileTransferState.fromCode(fileMessage.transferRecord?.state)??FileTransferState.send;
+  int? get current => fileMessage.transferRecord?.current;
+  int? get total => fileMessage.transferRecord?.total;
 
   double? get progress {
     final t = fileMessage.totalSize;
-    final current=transferRecord?.current;
+    final current=fileMessage.transferRecord?.current;
     if (t == null || t <= 0||current==null) return null;
     return (current / t).clamp(0.0, 1.0);
   }

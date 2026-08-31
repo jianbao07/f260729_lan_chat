@@ -1,7 +1,6 @@
 import 'package:yf_code/enum/MessageStateType.dart';
+import 'package:yf_code/enum/MessageType.dart';
 
-/// from_message_id : "3"
-/// to_message_id : "3"
 /// session_id : "xxx"
 /// from_device_id : "xxx"
 /// to_device_id : "yyy"
@@ -13,8 +12,6 @@ import 'package:yf_code/enum/MessageStateType.dart';
 
 class BaseMessageBean {
   BaseMessageBean({
-    this.fromMessageId,
-    this.toMessageId,
     this.sessionId,
     this.fromDeviceId,
     this.toDeviceId,
@@ -26,8 +23,6 @@ class BaseMessageBean {
   });
 
   BaseMessageBean.fromJson(dynamic json) {
-    fromMessageId = json['from_message_id']?.toString();
-    toMessageId = json['to_message_id']?.toString();
     sessionId = json['session_id'];
     fromDeviceId = json['from_device_id'];
     toDeviceId = json['to_device_id'];
@@ -37,8 +32,6 @@ class BaseMessageBean {
     state = json['state'];
     isSender = json['is_sender'];
   }
-  String? fromMessageId;
-  String? toMessageId;
   String? sessionId;
   String? fromDeviceId;
   String? toDeviceId;
@@ -50,8 +43,6 @@ class BaseMessageBean {
 
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{};
-    map['from_message_id'] = fromMessageId;
-    map['to_message_id'] = toMessageId;
     map['session_id'] = sessionId;
     map['from_device_id'] = fromDeviceId;
     map['to_device_id'] = toDeviceId;
@@ -66,9 +57,11 @@ class BaseMessageBean {
 }
 
 abstract class Message{
-  bool initBase(String? myDeviceId, String? deviceId,String fromMessageId){
+  MessageType get type;
+  String get messageId;
+
+  bool initBase(String? myDeviceId, String? deviceId){
     final base = this.base ?? BaseMessageBean();
-    base.fromMessageId=fromMessageId;
     base.fromDeviceId ??= myDeviceId;
     base.toDeviceId ??= deviceId;
     if (myDeviceId != null && deviceId != null) {

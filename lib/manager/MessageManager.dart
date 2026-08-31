@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:yf_code/InitManager.dart';
 import 'package:yf_code/bean/AckFileBean.dart';
 import 'package:yf_code/bean/CmdAckBean.dart';
 import 'package:yf_code/bean/BaseMessageBean.dart';
@@ -15,7 +14,7 @@ import 'package:yf_code/model/MessageModel.dart';
 class MessageManager {
   MessageManager._();
 
-  /// 正在发送的协议消息（from_message_id -> Message）
+  /// 正在发送的协议消息（messageId -> Message）
   static final Map<String, Message> sendingMessages = {};
 
   /// 历史协议消息（供 MessageModel 重建展示）
@@ -33,21 +32,21 @@ class MessageManager {
     message.base?.isSender=true;
     _addMessage(message);
 
-    final fromMessageId = message.base?.fromMessageId;
-    if (fromMessageId == null) return;
+    final messageId = message.messageId;
+    if (messageId.isEmpty) return;
 
-    sendingMessages[fromMessageId] = message;
+    sendingMessages[messageId] = message;
 
     // 启动定时：500ms 内没收到 ack 则重发，最多重发三次，间隔 500ms；
     // 1500ms 后仍未收到 ack 则标记为发送失败。
     var resentCount = 0;
-    _ackTimers[fromMessageId]?.cancel();
-    _ackTimers[fromMessageId] = Timer.periodic(
+    _ackTimers[messageId]?.cancel();
+    _ackTimers[messageId] = Timer.periodic(
       const Duration(milliseconds: 500),
       (timer) {
-        if (!sendingMessages.containsKey(fromMessageId)) {
+        if (!sendingMessages.containsKey(messageId)) {
           timer.cancel();
-          _ackTimers.remove(fromMessageId);
+          _ackTimers.remove(messageId);
           return;
         }
 
@@ -59,9 +58,9 @@ class MessageManager {
           message.base?.state = MessageStateType.fail.code;
           message.base?.failTimestampUtc =
               DateTime.now().toUtc().millisecondsSinceEpoch;
-          sendingMessages.remove(fromMessageId);
+          sendingMessages.remove(messageId);
           timer.cancel();
-          _ackTimers.remove(fromMessageId);
+          _ackTimers.remove(messageId);
           sessionMessageModels[message.base?.sessionId]?.onChangeMessage(message);
         }
       },
@@ -74,20 +73,11 @@ class MessageManager {
     _addMessage(message);
   }
 
-  static void updateFile(
-    String transferId, {
-    FileTransferState? state,
-    String? receiverLocalPath,
-    String? errorMsg,
-    String? localPath,
-    int? current,
-    int? total,
-  }) {
+  static void updateFile(String transferId, {FileTransferState? state, String? errorMsg, String? localPath, int? current, int? total,}) {
     final offer = _findSendFile(transferId);
     if (offer == null) return;
-    if (offer.base?.fromDeviceId != InitManager.deviceId) return;
-    offer.senderTransfer ??= FileTransferRecord(transferId: transferId, isSender: true, total: offer.totalSize);
-    final record = offer.senderTransfer!;
+    offer.transferRecord ??= FileTransferRecord(transferId: transferId, isSender: offer.base?.isSender == true, total: offer.totalSize);
+    final record = offer.transferRecord!;
     if (state != null) record.state = state.code;
     if (errorMsg != null) record.errorMessage = errorMsg;
     if (localPath != null) record.localPath = localPath;
@@ -121,9 +111,8 @@ class MessageManager {
 
   /// 协议历史中是否已有该消息。
   static bool _isExists(Message message) {
-    final fromMessageId = message.base?.fromMessageId;
-    if (fromMessageId != null &&
-        historyMessages.any((m) => m.base?.fromMessageId == fromMessageId)) {
+    if (message.messageId.isNotEmpty &&
+        historyMessages.any((m) => m.messageId == message.messageId)) {
       return true;
     }
     if (message is SendFileBean) {
@@ -149,10 +138,10 @@ class MessageManager {
 
   /// 收到 ack
   static void onAck(CmdAckBean ack) {
-    final fromMessageId = ack.fromMessageId;
-    if (fromMessageId == null) return;
-    final message = sendingMessages.remove(fromMessageId);
-    _ackTimers.remove(fromMessageId)?.cancel();
+    final messageId = ack.messageId;
+    if (messageId == null) return;
+    final message = sendingMessages.remove(messageId);
+    _ackTimers.remove(messageId)?.cancel();
     if (message == null) return;
 
     message.base?.state = MessageStateType.success.code;
@@ -166,10 +155,6 @@ class MessageManager {
     if (message is ReplySendFileBean) return message.transferId;
     if (message is AckFileBean) return message.transferId;
     return null;
-  }
-
-  static String newFromMessageId() {
-    return "${InitManager.deviceId}-${historyMessages.length}";
   }
 
   static MessageModel createMessageModel(String sessionId) {

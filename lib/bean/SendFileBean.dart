@@ -2,6 +2,7 @@ import 'package:yf_code/bean/BaseMessageBean.dart';
 import 'package:yf_code/bean/FileTransferRecord.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
 import 'package:yf_code/enum/MessageType.dart';
+import 'package:yf_code/manager/MessageStore.dart';
 
 /// type : "file"
 /// base : {"session_id":"xxx","from_device_id":"xxx","to_device_id":"yyy","send_timestamp_utc":1785173158277,"success_timestamp_utc":1785173158277,"fail_timestamp_utc":1785173158277,"state":"sending"}
@@ -12,8 +13,7 @@ import 'package:yf_code/enum/MessageType.dart';
 /// total_size : 15728640
 /// sha256 : "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 /// port : 8080
-/// sender_transfer : {"transfer_id":"xxx","state":"send","is_sender":true,"local_path":"/storage/emulated/0/..../新建文本文件.txt"}
-/// receiver_transfer : {"transfer_id":"xxx","state":"send","is_sender":false,"local_path":"/storage/emulated/0/..../新建文本文件.txt"}
+/// transfer_record : {"transfer_id":"xxx","state":"send","is_sender":true,"local_path":"/storage/emulated/0/..../新建文本文件.txt"}
 
 class SendFileBean extends Message {
   SendFileBean({
@@ -23,11 +23,10 @@ class SendFileBean extends Message {
     this.totalSize,
     this.sha256,
     this.port,
-    this.senderTransfer,
-    this.receiverTransfer,
-  });
+    this.transferRecord,
+  }) : messageId = MessageStore.newMessageId(MessageType.file);
 
-  SendFileBean.fromJson(dynamic json) {
+  SendFileBean.fromJson(dynamic json) : messageId = json['message_id']?.toString() ?? '' {
     base = json['base'] != null ? BaseMessageBean.fromJson(json['base']) : null;
     transferId = json['transfer_id'];
     mimeType = json['mime_type'];
@@ -35,15 +34,13 @@ class SendFileBean extends Message {
     totalSize = json['total_size'];
     sha256 = json['sha256'];
     port = json['port'];
-    senderTransfer = json['sender_transfer'] != null
-        ? FileTransferRecord.fromJson(json['sender_transfer'])
-        : null;
-    receiverTransfer = json['receiver_transfer'] != null
-        ? FileTransferRecord.fromJson(json['receiver_transfer'])
-        : null;
+    transferRecord = json['transfer_record'] != null ? FileTransferRecord.fromJson(json['transfer_record']) : null;
   }
 
-  final String type = MessageType.file.code;
+  @override
+  MessageType get type => MessageType.file;
+  @override
+  final String messageId;
   final String state = FileTransferState.send.code;
 
   /// 传输 id
@@ -54,16 +51,14 @@ class SendFileBean extends Message {
   String? sha256;
   int? port;
 
-  /// 发送者文件传输状态（由发送者赋值；网络发送时为空）
-  FileTransferRecord? senderTransfer;
-
-  /// 接收者文件传输状态（由接收者赋值；网络发送时为空）
-  FileTransferRecord? receiverTransfer;
+  /// 本端文件传输状态（由本地维护；网络发送时为空）
+  FileTransferRecord? transferRecord;
 
   @override
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{};
-    map['type'] = type;
+    map['type'] = type.code;
+    map['message_id'] = messageId;
     if (base != null) {
       map['base'] = base?.toJson();
     }
@@ -74,11 +69,8 @@ class SendFileBean extends Message {
     map['total_size'] = totalSize;
     map['sha256'] = sha256;
     map['port'] = port;
-    if (senderTransfer != null) {
-      map['sender_transfer'] = senderTransfer?.toJson();
-    }
-    if (receiverTransfer != null) {
-      map['receiver_transfer'] = receiverTransfer?.toJson();
+    if (transferRecord != null) {
+      map['transfer_record'] = transferRecord?.toJson();
     }
     return map;
   }

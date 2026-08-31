@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:yf_code/InitManager.dart';
 import 'package:yf_code/bean/AckFileBean.dart';
-import 'package:yf_code/bean/FileTransferRecord.dart';
 import 'package:yf_code/bean/ReplySendFileBean.dart';
 import 'package:yf_code/bean/SendFileBean.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
@@ -262,19 +261,13 @@ class FileTransferManager {
         },
       );
       session.state = FileTransferState.success;
-      offer.receiverTransfer ??= FileTransferRecord(transferId: transferId, isSender: false);
-      offer.receiverTransfer!.localPath = path;
       final ack = AckFileBean.buildSuccess(offer, receiverLocalPath: path);
       await SendMessageManager.sendMessage(
         ack,
         session.peerIp,
         session.peerDeviceId,
       );
-      MessageManager.updateFile(
-        transferId,
-        state: FileTransferState.success,
-        receiverLocalPath: path,
-      );
+      MessageManager.updateFile(transferId, state: FileTransferState.success, localPath: path);
       iLog("接收完成并已发送 ack transferId=$transferId path=$path");
     } catch (e) {
       iLog("接收失败 transferId=$transferId: $e");

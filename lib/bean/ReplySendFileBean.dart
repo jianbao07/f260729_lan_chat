@@ -1,6 +1,8 @@
 import 'package:yf_code/bean/BaseMessageBean.dart';
 import 'package:yf_code/bean/SendFileBean.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
+import 'package:yf_code/enum/MessageType.dart';
+import 'package:yf_code/manager/MessageStore.dart';
 
 /// type : "file"
 /// base : {"session_id":"xxx","from_device_id":"xxx","to_device_id":"yyy","send_timestamp_utc":1785173158277,"success_timestamp_utc":1785173158277,"fail_timestamp_utc":1785173158277,"state":"sending"}
@@ -13,16 +15,14 @@ import 'package:yf_code/enum/FileTransferState.dart';
 
 class ReplySendFileBean extends Message {
   ReplySendFileBean({
-      this.type, 
       this.state,
       this.transferId,
       this.mimeType, 
       this.name, 
       this.totalSize, 
-      this.sha256,});
+      this.sha256,}) : messageId = MessageStore.newMessageId(MessageType.file);
 
-  ReplySendFileBean.fromJson(dynamic json) {
-    type = json['type'];
+  ReplySendFileBean.fromJson(dynamic json) : messageId = json['message_id']?.toString() ?? '' {
     base = json['base'] != null ? BaseMessageBean.fromJson(json['base']) : null;
     state = json['state'];
     transferId = json['transfer_id'];
@@ -31,7 +31,10 @@ class ReplySendFileBean extends Message {
     totalSize = json['total_size'];
     sha256 = json['sha256'];
   }
-  String? type;
+  @override
+  MessageType get type => MessageType.file;
+  @override
+  final String messageId;
   String? state;
   /// 传输 id
   String? transferId;
@@ -43,7 +46,8 @@ class ReplySendFileBean extends Message {
   @override
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{};
-    map['type'] = type;
+    map['type'] = type.code;
+    map['message_id'] = messageId;
     if (base != null) {
       map['base'] = base?.toJson();
     }
@@ -58,7 +62,6 @@ class ReplySendFileBean extends Message {
 
   static ReplySendFileBean buildRejected(SendFileBean sendFileBean) {
     return ReplySendFileBean(
-      type: sendFileBean.type,
       state: FileTransferState.rejected.code,
       transferId: sendFileBean.transferId,
       mimeType: sendFileBean.mimeType,
@@ -70,7 +73,6 @@ class ReplySendFileBean extends Message {
 
   static ReplySendFileBean buildAccept(SendFileBean sendFileBean) {
     return ReplySendFileBean(
-      type: sendFileBean.type,
       state: FileTransferState.transferring.code,
       transferId: sendFileBean.transferId,
       mimeType: sendFileBean.mimeType,

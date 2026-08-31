@@ -1,6 +1,8 @@
 import 'package:yf_code/bean/BaseMessageBean.dart';
 import 'package:yf_code/bean/SendFileBean.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
+import 'package:yf_code/enum/MessageType.dart';
+import 'package:yf_code/manager/MessageStore.dart';
 
 /// transfer_id : "xxx"
 /// type : "file"
@@ -11,21 +13,22 @@ import 'package:yf_code/enum/FileTransferState.dart';
 class AckFileBean extends Message {
   AckFileBean({
     this.transferId,
-    this.type,
     this.state,
     this.receiverLocalPath,
-  });
+  }) : messageId = MessageStore.newMessageId(MessageType.file);
 
-  AckFileBean.fromJson(dynamic json) {
+  AckFileBean.fromJson(dynamic json) : messageId = json['message_id']?.toString() ?? '' {
     transferId = json['transfer_id'];
-    type = json['type'];
     base = json['base'] != null ? BaseMessageBean.fromJson(json['base']) : null;
     state = json['state'];
     receiverLocalPath = json['receiver_local_path'];
   }
 
   String? transferId;
-  String? type;
+  @override
+  MessageType get type => MessageType.file;
+  @override
+  final String messageId;
   String? state;
 
   /// 接收者本地保存路径（由接收者赋值；仅本地记录，网络发送时为空）
@@ -35,7 +38,8 @@ class AckFileBean extends Message {
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{};
     map['transfer_id'] = transferId;
-    map['type'] = type;
+    map['type'] = type.code;
+    map['message_id'] = messageId;
     if (base != null) {
       map['base'] = base?.toJson();
     }
@@ -50,7 +54,6 @@ class AckFileBean extends Message {
   }) {
     return AckFileBean(
       transferId: sendFileBean.transferId,
-      type: sendFileBean.type,
       state: FileTransferState.success.code,
       receiverLocalPath: receiverLocalPath,
     );
@@ -59,7 +62,6 @@ class AckFileBean extends Message {
   static AckFileBean buildFailed(SendFileBean sendFileBean) {
     return AckFileBean(
       transferId: sendFileBean.transferId,
-      type: sendFileBean.type,
       state: FileTransferState.failed.code,
     );
   }

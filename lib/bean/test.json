@@ -1,7 +1,9 @@
 {
-  "transfer_id": "xxx",
-  "state": "send",
-  "is_sender": true,
-  "current": 524,
-  "total": 63254
+  "conversationId": "peer_device_abc",
+  "totalMessages": 2350,
+  "totalPages": 24,
+  "pages": [
+    { "name": "name", "count": 30 },
+    { "name": "name", "count": 17 }
+  ]
 }

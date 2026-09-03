@@ -3,7 +3,7 @@ import 'package:yf_code/enum/MessageType.dart';
 import 'package:yf_code/manager/MessageStore.dart';
 
 /// type : "text"
-/// base : {"session_id":"xxx","from_device_id":"xxx","to_device_id":"yyy","send_timestamp_utc":1785173158277,"success_timestamp_utc":1785173158277,"fail_timestamp_utc":1785173158277,"state":"sending"}
+/// base : {"conversation_id":"xxx","from_device_id":"xxx","to_device_id":"yyy","send_timestamp_utc":1785173158277,"success_timestamp_utc":1785173158277,"fail_timestamp_utc":1785173158277,"state":"sending"}
 /// text : "你好你好"
 
 class TextMessageBean extends Message {
@@ -11,6 +11,7 @@ class TextMessageBean extends Message {
 
   TextMessageBean.fromJson(dynamic json) : messageId = json['message_id']?.toString() ?? '' {
     base = json['base'] != null ? BaseMessageBean.fromJson(json['base']) : null;
+    pageName = json['page_name'];
     text = json['text'];
   }
   @override
@@ -27,6 +28,7 @@ class TextMessageBean extends Message {
     if (base != null) {
       map['base'] = base?.toJson();
     }
+    map['page_name'] = pageName;
     map['text'] = text;
     return map;
   }

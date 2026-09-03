@@ -11,7 +11,7 @@ import 'package:yf_code/enum/FileTransferState.dart';
 import 'package:yf_code/enum/MessageStateType.dart';
 import 'package:yf_code/manager/AppFileStore.dart';
 import 'package:yf_code/manager/FileTransferManager.dart';
-import 'package:yf_code/manager/MessageManager.dart';
+import 'package:yf_code/manager/MessageStore.dart';
 import 'package:yf_code/manager/SendMessageManager.dart';
 import 'package:yf_code/model/IMessage/FileMessageDisplay.dart';
 import 'package:yf_code/model/IMessage/IMessageDisplay.dart';
@@ -54,7 +54,7 @@ class _ChatPageState extends State<ChatPage> {
       InitManager.deviceId,
       widget.device.deviceId,
     );
-    _messageModel = MessageManager.createMessageModel(_sessionId);
+    _messageModel = MessageStore.createMessageModel(_sessionId);
     _lastMessageCount = _messageModel.messages.length;
     _messageModel.addListener(_onMessagesChanged);
   }
@@ -77,7 +77,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void dispose() {
     _messageModel.removeListener(_onMessagesChanged);
-    MessageManager.destroyMessageModel(_sessionId);
+    MessageStore.destroyMessageModel(_sessionId);
     _controller.dispose();
     _scrollController.dispose();
     _focusNode.dispose();

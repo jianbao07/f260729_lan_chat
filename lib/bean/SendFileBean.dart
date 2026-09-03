@@ -5,7 +5,7 @@ import 'package:yf_code/enum/MessageType.dart';
 import 'package:yf_code/manager/MessageStore.dart';
 
 /// type : "file"
-/// base : {"session_id":"xxx","from_device_id":"xxx","to_device_id":"yyy","send_timestamp_utc":1785173158277,"success_timestamp_utc":1785173158277,"fail_timestamp_utc":1785173158277,"state":"sending"}
+/// base : {"conversation_id":"xxx","from_device_id":"xxx","to_device_id":"yyy","send_timestamp_utc":1785173158277,"success_timestamp_utc":1785173158277,"fail_timestamp_utc":1785173158277,"state":"sending"}
 /// state : "send"
 /// transfer_id : "xxx"
 /// mime_type : "text/plain"
@@ -28,6 +28,7 @@ class SendFileBean extends Message {
 
   SendFileBean.fromJson(dynamic json) : messageId = json['message_id']?.toString() ?? '' {
     base = json['base'] != null ? BaseMessageBean.fromJson(json['base']) : null;
+    pageName = json['page_name'];
     transferId = json['transfer_id'];
     mimeType = json['mime_type'];
     name = json['name'];
@@ -62,6 +63,7 @@ class SendFileBean extends Message {
     if (base != null) {
       map['base'] = base?.toJson();
     }
+    map['page_name'] = pageName;
     map['state'] = state;
     map['transfer_id'] = transferId;
     map['mime_type'] = mimeType;

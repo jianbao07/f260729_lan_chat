@@ -8,28 +8,22 @@ import 'package:yf_code/bean/ReplySendFileBean.dart';
 import 'package:yf_code/bean/SendFileBean.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
 import 'package:yf_code/enum/MessageStateType.dart';
+import 'package:yf_code/manager/MessageStore.dart';
 import 'package:yf_code/manager/SendMessageManager.dart';
-import 'package:yf_code/model/MessageModel.dart';
 
 class MessageManager {
   MessageManager._();
 
   /// 正在发送的协议消息（messageId -> Message）
   static final Map<String, Message> sendingMessages = {};
-
-  /// 历史协议消息（供 MessageModel 重建展示）
-  static final List<Message> historyMessages = [];
-
-  /// transfer_id -> session_id
-  static final Map<String, String> _transferSessionIds = {};
-
-  static final Map<String, MessageModel> sessionMessageModels = {};
+  static final Map<String, String> transferSessionIds = {};//transfer_id -> conversation_id
 
   static final Map<String, Timer> _ackTimers = {};
 
   /// 回调发了哪些消息
   static void onMessageSent(Message message, String ip, String? deviceId) {
     message.base?.isSender=true;
+    MessageStore.addMessage(message);
     _addMessage(message);
 
     final messageId = message.messageId;
@@ -61,7 +55,7 @@ class MessageManager {
           sendingMessages.remove(messageId);
           timer.cancel();
           _ackTimers.remove(messageId);
-          sessionMessageModels[message.base?.sessionId]?.onChangeMessage(message);
+          MessageStore.onChangeMessage(message);
         }
       },
     );
@@ -70,6 +64,7 @@ class MessageManager {
   /// 回调收到了哪些消息
   static void onMessageReceived(Message message) {
     message.base?.isSender=false;
+    MessageStore.addMessage(message);
     _addMessage(message);
   }
 
@@ -84,56 +79,37 @@ class MessageManager {
     if (current != null) record.current = current;
     if (total != null) record.total = total;
 
-    final sessionId = _transferSessionIds[transferId];
-    if (sessionId == null) return;
-    sessionMessageModels[sessionId]?.onChangeMessage(offer);
+    MessageStore.onChangeMessage(offer);
   }
 
   static SendFileBean? _findSendFile(String transferId) {
-    for (final message in historyMessages) {
-      if (message is SendFileBean && message.transferId == transferId) return message;
+    final sessionId = transferSessionIds[transferId];
+    final candidates = sessionId != null
+        ? [MessageStore.historyMessages[sessionId] ?? const <Message>[]]
+        : MessageStore.historyMessages.values;
+    for (final messages in candidates) {
+      for (final message in messages) {
+        if (message is SendFileBean && message.transferId == transferId) return message;
+      }
     }
     return null;
   }
 
   static void _addMessage(Message message) {
-    if (_isExists(message)) return;
-    historyMessages.add(message);
-    final transferId = _transferIdOf(message);
-    final sessionId = message.base?.sessionId;
+    final transferId = transferIdOf(message);
+    final conversationId = message.base?.conversationId;
     if (transferId != null &&
-        sessionId != null &&
-        !_transferSessionIds.containsKey(transferId)) {
-      _transferSessionIds[transferId] = sessionId;
+        conversationId != null &&
+        !transferSessionIds.containsKey(transferId)) {
+      transferSessionIds[transferId] = conversationId;
     }
-    _getSessionModel(message)?.addMessage(message);
   }
 
-  /// 协议历史中是否已有该消息。
-  static bool _isExists(Message message) {
-    if (message.messageId.isNotEmpty &&
-        historyMessages.any((m) => m.messageId == message.messageId)) {
-      return true;
-    }
-    if (message is SendFileBean) {
-      final transferId = message.transferId;
-      if (transferId != null && _transferSessionIds.containsKey(transferId)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  static MessageModel? _getSessionModel(Message message) {
-    final sessionId = message.base?.sessionId ??
-        _sessionIdOfTransfer(_transferIdOf(message));
-    if (sessionId == null) return null;
-    return sessionMessageModels[sessionId];
-  }
-
-  static String? _sessionIdOfTransfer(String? transferId) {
-    if (transferId == null) return null;
-    return _transferSessionIds[transferId];
+  static String? transferIdOf(Message message) {
+    if (message is SendFileBean) return message.transferId;
+    if (message is ReplySendFileBean) return message.transferId;
+    if (message is AckFileBean) return message.transferId;
+    return null;
   }
 
   /// 收到 ack
@@ -147,31 +123,6 @@ class MessageManager {
     message.base?.state = MessageStateType.success.code;
     message.base?.successTimestampUtc =
         DateTime.now().toUtc().millisecondsSinceEpoch;
-    sessionMessageModels[message.base?.sessionId]?.onChangeMessage(message);
-  }
-
-  static String? _transferIdOf(Message message) {
-    if (message is SendFileBean) return message.transferId;
-    if (message is ReplySendFileBean) return message.transferId;
-    if (message is AckFileBean) return message.transferId;
-    return null;
-  }
-
-  static MessageModel createMessageModel(String sessionId) {
-    final existing = sessionMessageModels[sessionId];
-    if (existing != null) return existing;
-
-    final messages = historyMessages.where((message) {
-      final sid = message.base?.sessionId ??
-          _sessionIdOfTransfer(_transferIdOf(message));
-      return sid == sessionId;
-    }).toList();
-    final model = MessageModel(sessionId, messages);
-    sessionMessageModels[sessionId] = model;
-    return model;
-  }
-
-  static void destroyMessageModel(String sessionId) {
-    sessionMessageModels.remove(sessionId)?.dispose();
+    MessageStore.onChangeMessage(message);
   }
 }

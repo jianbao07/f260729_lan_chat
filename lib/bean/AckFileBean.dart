@@ -6,7 +6,7 @@ import 'package:yf_code/manager/MessageStore.dart';
 
 /// transfer_id : "xxx"
 /// type : "file"
-/// base : {"session_id":"xxx","from_device_id":"xxx","to_device_id":"yyy","send_timestamp_utc":1785173158277,"success_timestamp_utc":1785173158277,"fail_timestamp_utc":1785173158277,"state":"sending"}
+/// base : {"conversation_id":"xxx","from_device_id":"xxx","to_device_id":"yyy","send_timestamp_utc":1785173158277,"success_timestamp_utc":1785173158277,"fail_timestamp_utc":1785173158277,"state":"sending"}
 /// state : "success"
 /// receiver_local_path : "/storage/emulated/0/..../新建文本文件.txt"
 
@@ -20,6 +20,7 @@ class AckFileBean extends Message {
   AckFileBean.fromJson(dynamic json) : messageId = json['message_id']?.toString() ?? '' {
     transferId = json['transfer_id'];
     base = json['base'] != null ? BaseMessageBean.fromJson(json['base']) : null;
+    pageName = json['page_name'];
     state = json['state'];
     receiverLocalPath = json['receiver_local_path'];
   }
@@ -43,6 +44,7 @@ class AckFileBean extends Message {
     if (base != null) {
       map['base'] = base?.toJson();
     }
+    map['page_name'] = pageName;
     map['state'] = state;
     map['receiver_local_path'] = receiverLocalPath;
     return map;

@@ -5,7 +5,10 @@ import 'dart:math';
 import 'package:path_provider/path_provider.dart';
 import 'package:yf_code/bean/BaseMessageBean.dart';
 import 'package:yf_code/bean/ConversationIndex.dart';
+import 'package:yf_code/bean/SendFileBean.dart';
+import 'package:yf_code/bean/TextMessageBean.dart';
 import 'package:yf_code/enum/MessageType.dart';
+import 'package:yf_code/model/ConversationModel.dart';
 import 'package:yf_code/model/MessageModel.dart';
 
 class MessageStore {
@@ -13,18 +16,57 @@ class MessageStore {
   static const _PAGE_SIZE=20;
   static final Map<String, ConversationIndex> conversationIndexMap = {};//会话id->会话index.json
   static final Map<String, List<Message>> historyMessages = {};//会话id->消息
-  static final Map<String, MessageModel> sessionMessageModels = {};
+  static final Map<String, MessageModel> conversationMessageModels = {};
   static final Random _random = Random.secure();
   static late String messageRecordDir;
 
 
-  static void init()async{
+  static Future<void> init() async {
     final support = await getApplicationSupportDirectory();
     final dir = Directory(
       '${support.path}${Platform.pathSeparator}message',
     );
     await dir.create(recursive: true);
     messageRecordDir=dir.path;
+    await initMessage();
+  }
+
+  static Future<void> initMessage() async {
+    final root = Directory(messageRecordDir);
+    if (!await root.exists()) return;
+
+    await for (final entity in root.list()) {
+      if (entity is! Directory) continue;
+      final conversationId = entity.path.split(Platform.pathSeparator).last;
+      if (conversationId.isEmpty) continue;
+
+      final indexFile = File('${entity.path}${Platform.pathSeparator}index.json');
+      if (!await indexFile.exists()) continue;
+
+      final json = jsonDecode(await indexFile.readAsString());
+      final index = ConversationIndex.fromJson(json);
+      index.currentDir = entity.path;
+      conversationIndexMap[conversationId] = index;
+
+      final pages = index.pages ?? [];
+      if (pages.isEmpty) continue;
+      final pageName = pages.last.name;
+      if (pageName == null) continue;
+
+      final pageFile = File('${entity.path}${Platform.pathSeparator}$pageName');
+      if (!await pageFile.exists()) continue;
+
+      final records = jsonDecode(await pageFile.readAsString()) as List<dynamic>;
+      final messages = historyMessages.putIfAbsent(conversationId, () => []);
+      for (final record in records) {
+        final message = Message.fromJson(record);
+        if (message == null) continue;
+        message.pageName ??= pageName;
+        if (messages.any((m) => m.messageId == message.messageId)) continue;
+        messages.add(message);
+      }
+    }
+    _syncConversations();
   }
 
   static String newMessageId(MessageType type) {
@@ -38,7 +80,8 @@ class MessageStore {
       return;
     }
     historyMessages.putIfAbsent(conversationId, () => []).add(message);
-    _getSessionModel(message)?.addMessage(message);
+    _getConversationModel(message)?.addMessage(message);
+    ConversationModel.instance.onConversation(message);
 
     final index = await _getConversationIndex(conversationId);
     final pages = index.pages ??= [];
@@ -126,7 +169,7 @@ class MessageStore {
       final i = messages.indexWhere((m) => m.messageId == message.messageId);
       if (i >= 0) messages[i] = message;
     }
-    sessionMessageModels[conversationId]?.onChangeMessage(message);
+    conversationMessageModels[conversationId]?.onChangeMessage(message);
 
     final pageName = message.pageName;
     if (pageName == null) return;
@@ -175,27 +218,43 @@ class MessageStore {
     return index;
   }
 
-  static MessageModel createMessageModel(String sessionId) {
-    final existing = sessionMessageModels[sessionId];
+  static MessageModel createMessageModel(String conversationId) {
+    final existing = conversationMessageModels[conversationId];
     if (existing != null) return existing;
 
-    final messages = historyMessages[sessionId] ?? [];
-    final model = MessageModel(sessionId, messages);
-    sessionMessageModels[sessionId] = model;
+    final messages = historyMessages[conversationId] ?? [];
+    final model = MessageModel(conversationId, messages);
+    conversationMessageModels[conversationId] = model;
     if(messages.isEmpty){
-      loadMoreMessage(sessionId);
+      loadMoreMessage(conversationId);
     }
     return model;
   }
 
-  static void destroyMessageModel(String sessionId) {
-    sessionMessageModels.remove(sessionId)?.dispose();
+  static void destroyMessageModel(String conversationId) {
+    conversationMessageModels.remove(conversationId)?.dispose();
   }
 
-  static MessageModel? _getSessionModel(Message message) {
+  static MessageModel? _getConversationModel(Message message) {
     final conversationId = message.base?.conversationId;
     if (conversationId == null) return null;
-    return sessionMessageModels[conversationId];
+    return conversationMessageModels[conversationId];
+  }
+
+  static void _syncConversations() {
+    for (final messages in historyMessages.values) {
+      if (messages.isEmpty) continue;
+      Message? last;
+      for (var i = messages.length - 1; i >= 0; i--) {
+        final m = messages[i];
+        if (m is TextMessageBean || m is SendFileBean) {
+          last = m;
+          break;
+        }
+      }
+      last ??= messages.last;
+      ConversationModel.instance.onConversation(last);
+    }
   }
 
   /// 协议历史中是否已有该消息。

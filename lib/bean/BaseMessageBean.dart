@@ -65,6 +65,15 @@ abstract class Message{
   MessageType get type;
   String get messageId;
 
+  /// 对方设备 id：自己发出则取 `toDeviceId`，收到则取 `fromDeviceId`
+  String get peerDeviceId {
+    final base = this.base;
+    if (base == null) return '';
+    if (base.isSender == true) return base.toDeviceId ?? '';
+    if (base.isSender == false) return base.fromDeviceId ?? '';
+    return base.fromDeviceId ?? base.toDeviceId ?? '';
+  }
+
   bool initBase(String? myDeviceId, String? deviceId){
     final base = this.base ?? BaseMessageBean();
     base.fromDeviceId ??= myDeviceId;

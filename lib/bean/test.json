@@ -1,9 +1,6 @@
 {
   "conversationId": "peer_device_abc",
-  "totalMessages": 2350,
-  "totalPages": 24,
-  "pages": [
-    { "name": "name", "count": 30 },
-    { "name": "name", "count": 17 }
-  ]
+  "lastMessagesPreview": "[图片]",
+  "lastMessagesTimestampUtc": 123456,
+  "conversationDeviceId": "1235d"
 }

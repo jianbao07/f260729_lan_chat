@@ -7,13 +7,13 @@ import 'package:yf_code/model/IMessage/IMessageDisplay.dart';
 import 'package:yf_code/model/IMessage/TextMessageDisplay.dart';
 
 class MessageModel extends ChangeNotifier {
-  MessageModel(this.sessionId, List<Message> historyMessages) {
+  MessageModel(this.conversationId, List<Message> historyMessages) {
     for (var item in historyMessages) {
       _ingest(item);
     }
   }
 
-  String sessionId;
+  String conversationId;
   final List<IMessageDisplay> _messageList = [];
 
   List<IMessageDisplay> get messages => List.unmodifiable(_messageList);

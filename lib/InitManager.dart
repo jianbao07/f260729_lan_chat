@@ -23,7 +23,7 @@ class InitManager{
     OnlineDeviceManager.startBeat();
     OnlineDeviceManager.listenerBeat();
     TextChannel.init();
-    MessageStore.init();
+    await MessageStore.init();
   }
 
   static Future<void> _getDeviceInfo() async {

@@ -16,7 +16,7 @@ class MessageManager {
 
   /// 正在发送的协议消息（messageId -> Message）
   static final Map<String, Message> sendingMessages = {};
-  static final Map<String, String> transferSessionIds = {};//transfer_id -> conversation_id
+  static final Map<String, String> transferConversationIds = {};//transfer_id -> conversation_id
 
   static final Map<String, Timer> _ackTimers = {};
 
@@ -83,9 +83,9 @@ class MessageManager {
   }
 
   static SendFileBean? _findSendFile(String transferId) {
-    final sessionId = transferSessionIds[transferId];
-    final candidates = sessionId != null
-        ? [MessageStore.historyMessages[sessionId] ?? const <Message>[]]
+    final conversationId = transferConversationIds[transferId];
+    final candidates = conversationId != null
+        ? [MessageStore.historyMessages[conversationId] ?? const <Message>[]]
         : MessageStore.historyMessages.values;
     for (final messages in candidates) {
       for (final message in messages) {
@@ -100,8 +100,8 @@ class MessageManager {
     final conversationId = message.base?.conversationId;
     if (transferId != null &&
         conversationId != null &&
-        !transferSessionIds.containsKey(transferId)) {
-      transferSessionIds[transferId] = conversationId;
+        !transferConversationIds.containsKey(transferId)) {
+      transferConversationIds[transferId] = conversationId;
     }
   }
 

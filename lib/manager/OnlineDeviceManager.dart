@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path_provider/path_provider.dart';
 import 'package:yf_code/enum/RawMessageType.dart';
 import 'package:yf_code/bean/CmdBeatBean.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
-import 'package:yf_code/model/DeviceModel.dart';
+import 'package:yf_code/model/ConversationModel.dart';
+import 'package:yf_code/model/OnlineDeviceModel.dart';
 import 'package:yf_code/InitManager.dart';
 import 'package:yf_code/utils/MulticastLock.dart';
 import 'package:yf_code/utils/NetworkUtils.dart';
@@ -20,33 +22,46 @@ class OnlineDeviceManager {
   static RawDatagramSocket? _beatSocket;
   static RawDatagramSocket? _listenerSocket;
   static String? _myIP;
-  static Map<String,DeviceBean> _deviceList={};
+  static String? _deviceInfoDir;
+  static Map<String,DeviceBean> _deviceMap={};
+  static bool _isChange=false;
+  static const int _HEART_INTERVAL=5000;
 
-  static void _onBeat(CmdBeatBean b,String ip,int port){
-    final key=b.deviceId??ip;
-    final d=_deviceList[key];
-    if(d==null){
-      _deviceList[key]=DeviceBean(
-        name: b.name,
-        ipAddress: ip,
-        port: port,
-        updateTimestampUtc: b.timestampUtc,
-        deviceId: b.deviceId,
-      );
-    }else{
-      _deviceList[key]=d.copyWith(
-        name: b.name,
-        ipAddress: ip,
-        port: port,
-        updateTimestampUtc: b.timestampUtc,
-        deviceId: b.deviceId,
-      );
+  static void _onBeat(CmdBeatBean b,String ip){
+    final deviceId=b.deviceId;
+    if(deviceId==null){
+      iLog("${ip}:设备id为空");
+      return;
     }
-    updateList();
+    final d=_deviceMap[deviceId];
+    final device=d==null
+      ? DeviceBean(
+          name: b.name,
+          ipAddress: ip,
+          updateTimestampUtc: b.timestampUtc,
+          deviceId: b.deviceId,
+        )
+      : d.copyWith(
+          name: b.name,
+          ipAddress: ip,
+          updateTimestampUtc: b.timestampUtc,
+          deviceId: b.deviceId,
+        );
+    _deviceMap[deviceId]=device;
+    _isChange=true;
+    updateDeviceInfo(device);
   }
 
   static void updateList(){
-    DeviceModel.instance.setDeviceList(_deviceList.values.toList());
+    final nowUtc = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final before = _deviceMap.length;
+    _deviceMap.removeWhere((_, d) {
+      final ts = d.updateTimestampUtc?.toInt();
+      return ts == null || nowUtc - ts > _HEART_INTERVAL * 2;
+    });
+    if (_isChange || _deviceMap.length != before) {
+      OnlineDeviceModel.instance.setDeviceList(_deviceMap.values.toList());
+    }
   }
 
   static void startBeat() async {
@@ -64,6 +79,8 @@ class OnlineDeviceManager {
     _beatSocket = socket;
 
     void sendBeat() async{
+      updateList();
+      _isChange=false;
       final now=DateTime.now();
       dLog("自心跳-${_myIP}-${now.toLocal()}");
       final b=CmdBeatBean(name: InitManager.deviceName??_myIP,type: RawMessageType.beat.code,timestampUtc: now.toUtc().millisecondsSinceEpoch,deviceId: InitManager.deviceId);
@@ -81,7 +98,7 @@ class OnlineDeviceManager {
     }
 
     sendBeat();
-    _beatTimer = Timer.periodic(const Duration(seconds: 5), (_) => sendBeat());
+    _beatTimer = Timer.periodic(const Duration(milliseconds: _HEART_INTERVAL), (_) => sendBeat());
   }
 
   static void listenerBeat() async {
@@ -136,7 +153,7 @@ class OnlineDeviceManager {
         final text = utf8.decode(datagram.data);
         final json = jsonDecode(text) as Map<String, dynamic>;
         final b=CmdBeatBean.fromJson(json);
-        _onBeat(b,ip,port);
+        _onBeat(b,ip);
         final time=DateTime.fromMillisecondsSinceEpoch(b.timestampUtc?.toInt()??0,isUtc: true);
         dLog(
           "收到心跳 from=${ip}:${port} "
@@ -146,5 +163,46 @@ class OnlineDeviceManager {
         dLog("心跳解析失败 from=${datagram.address.address}: $e");
       }
     });
+  }
+
+  static Future<void> updateDeviceInfo(DeviceBean device) async {
+    ConversationModel.instance.onDeviceUpdate(device);
+    final deviceId = device.deviceId;
+    if (deviceId == null || deviceId.isEmpty) return;
+    final dir = await _deviceInfoRoot();
+    final file = File('${dir.path}${Platform.pathSeparator}${_deviceFileName(deviceId)}');
+    await file.writeAsString(jsonEncode(device.toJson()));
+  }
+
+  static Future<DeviceBean?> getDeviceInfo(String deviceId) async {
+    if (deviceId.isEmpty) return null;
+    final onlineDevice=_deviceMap[deviceId];
+    if(onlineDevice!=null){
+      return onlineDevice;
+    }
+    final dir = await _deviceInfoRoot();
+    final file = File('${dir.path}${Platform.pathSeparator}${_deviceFileName(deviceId)}');
+    if (!await file.exists()) return null;
+    try {
+      final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      return DeviceBean.fromJson(json);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<Directory> _deviceInfoRoot() async {
+    final cached = _deviceInfoDir;
+    if (cached != null) return Directory(cached);
+    final support = await getApplicationSupportDirectory();
+    final dir = Directory('${support.path}${Platform.pathSeparator}device');
+    await dir.create(recursive: true);
+    _deviceInfoDir = dir.path;
+    return dir;
+  }
+
+  static String _deviceFileName(String deviceId) {
+    final safe = deviceId.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').replaceAll('..', '_');
+    return '${safe.isEmpty ? 'unknown' : safe}.json';
   }
 }

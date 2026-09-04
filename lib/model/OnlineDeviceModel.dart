@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
 
-class DeviceModel with ChangeNotifier {
-  DeviceModel._();
-  static final DeviceModel instance = DeviceModel._();
+class OnlineDeviceModel with ChangeNotifier {
+  OnlineDeviceModel._();
+  static final OnlineDeviceModel instance = OnlineDeviceModel._();
 
   List<DeviceBean> _deviceList = [];
 

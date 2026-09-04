@@ -37,7 +37,7 @@ class _ChatPageState extends State<ChatPage> {
   bool _pickingFile = false;
   final Set<String> _fileActionBusy = {};
 
-  late final String _sessionId;
+  late final String _conversationId;
   late final MessageModel _messageModel;
   int _lastMessageCount = 0;
 
@@ -50,16 +50,16 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
-    _sessionId = _buildSessionId(
+    _conversationId = _buildConversationId(
       InitManager.deviceId,
       widget.device.deviceId,
     );
-    _messageModel = MessageStore.createMessageModel(_sessionId);
+    _messageModel = MessageStore.createMessageModel(_conversationId);
     _lastMessageCount = _messageModel.messages.length;
     _messageModel.addListener(_onMessagesChanged);
   }
 
-  static String _buildSessionId(String? myDeviceId, String? peerDeviceId) {
+  static String _buildConversationId(String? myDeviceId, String? peerDeviceId) {
     final myId = myDeviceId ?? '';
     final peerId = peerDeviceId ?? '';
     return myId.compareTo(peerId) <= 0 ? '$myId:$peerId' : '$peerId:$myId';
@@ -77,7 +77,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void dispose() {
     _messageModel.removeListener(_onMessagesChanged);
-    MessageStore.destroyMessageModel(_sessionId);
+    MessageStore.destroyMessageModel(_conversationId);
     _controller.dispose();
     _scrollController.dispose();
     _focusNode.dispose();

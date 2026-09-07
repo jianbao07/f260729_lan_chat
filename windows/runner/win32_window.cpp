@@ -134,10 +134,14 @@ bool Win32Window::Create(const std::wstring& title,
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
   double scale_factor = dpi / 96.0;
 
+  RECT rect = {0, 0, Scale(size.width, scale_factor),
+               Scale(size.height, scale_factor)};
+  AdjustWindowRectEx(&rect, WS_OVERLAPPEDWINDOW, FALSE, 0);
+
   HWND window = CreateWindow(
       window_class, title.c_str(), WS_OVERLAPPEDWINDOW,
       Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
-      Scale(size.width, scale_factor), Scale(size.height, scale_factor),
+      rect.right - rect.left, rect.bottom - rect.top,
       nullptr, nullptr, GetModuleHandle(nullptr), this);
 
   if (!window) {

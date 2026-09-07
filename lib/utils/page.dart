@@ -3,13 +3,34 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:yf_code/InitManager.dart';
+import 'package:yf_code/ui/widgets/AppChrome.dart';
 
-void startPageReplace(BuildContext context,Widget page){
-  Navigator.pushReplacement(context, MaterialPageRoute(builder: (context)=>page));
+PageRoute<T> _slideRoute<T>(Widget page) {
+  return PageRouteBuilder<T>(
+    pageBuilder: (context, animation, secondary) => page,
+    transitionDuration: const Duration(milliseconds: 240),
+    reverseTransitionDuration: const Duration(milliseconds: 200),
+    transitionsBuilder: (context, animation, secondary, child) {
+      final curved = CurvedAnimation(parent: animation, curve: Curves.easeOut);
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0.08, 0), end: Offset.zero).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
 }
 
-Future<T?> startPage<T extends Object?>(BuildContext context,Widget page){
-  return Navigator.push(context, MaterialPageRoute(builder: (context)=>page));
+void startPageReplace(BuildContext context, Widget page) {
+  Navigator.pushReplacement(context, _slideRoute(page));
+}
+
+Future<T?> startPage<T extends Object?>(BuildContext context, Widget page) {
+  return Navigator.push(context, _slideRoute<T>(page));
 }
 
 void gotoBack<T extends Object?>(BuildContext context, [T? result]){
@@ -24,41 +45,31 @@ void exitApp(){
   }
 }
 
-// enum ProtocolEnum{
-//   pp("pp"),ua("ua"),sdk("sdk"),collectInfo("collectInfo"),pay_protocol("pay_protocol"),permissions("permissions");
-//
-//   final String code;
-//   const ProtocolEnum(this.code);
-// }
-//
-// void gotoProtocolText(ProtocolEnum type, BuildContext context) {
-//   var platform;
-//   if (Platform.isAndroid) {
-//     platform = "android";
-//   } else if (Platform.isIOS) {
-//     platform = "ios";
-//   } else {
-//     platform = Platform.operatingSystem;
-//   }
-//   var url = "https://test.aisou.club/privacy_policy/aaa_flutter/main_entrance.html?platform=$platform&content_type=${type.code.toString()}" +
-//       "&language=${BaseConstant.languageCode}${BaseConstant.scriptCode != null ? "&scriptCode=${BaseConstant.scriptCode}" : ""}" +
-//       "&pack_name=${BaseConstant.packageName}&channel=${BaseConstant.channel}&email=${BaseConstant.email}" +
-//       "&app_name=${BaseConstant.appName}&companyName=${BaseConstant.companyName}";
-//
-//   gotoH5(url, inApp: true, context: context);
-// }
-//
-// Future<void> gotoH5(String url, {bool inApp = false, required BuildContext context}) async {
-//   iLog("前往地址:${url}");
-//   final Uri uri = Uri.parse(url);
-//   if (await canLaunchUrl(uri)) {
-//     await launchUrl(uri);
-//   } else {
-//     Navigator.push(
-//       context,
-//       MaterialPageRoute(
-//         builder: (_) => WebViewPage(initialUrl: url),
-//       ),
-//     );
-//   }
-// }
+enum ProtocolEnum {
+  pp('pp'),
+  ua('ua');
+
+  final String code;
+  const ProtocolEnum(this.code);
+}
+
+void gotoProtocolText(ProtocolEnum type, BuildContext context) {
+  final packName = InitManager.packageName.isEmpty ? 'com.ljb.lanchat' : InitManager.packageName;
+  final uri = Uri.https('jianbao07.github.io', '/Privacy-Policy-and-User-Agreement/index.html', {
+    'content_type': type.code,
+    'language': 'zh',
+    'pack_name': packName,
+  });
+  gotoH5(uri.toString(), context: context);
+}
+
+Future<void> gotoH5(String url, {bool inApp = false, required BuildContext context}) async {
+  final uri = Uri.parse(url);
+  final mode = inApp ? LaunchMode.inAppWebView : LaunchMode.externalApplication;
+  try {
+    final ok = await launchUrl(uri, mode: mode);
+    if (!ok && context.mounted) showAppToast(context, '无法打开页面');
+  } catch (_) {
+    if (context.mounted) showAppToast(context, '无法打开页面');
+  }
+}

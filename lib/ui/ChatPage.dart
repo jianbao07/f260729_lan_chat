@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:yf_code/InitManager.dart';
+import 'package:yf_code/bean/BaseMessageBean.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
 import 'package:yf_code/bean/TextMessageBean.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
@@ -12,11 +13,17 @@ import 'package:yf_code/enum/MessageStateType.dart';
 import 'package:yf_code/manager/AppFileStore.dart';
 import 'package:yf_code/manager/FileTransferManager.dart';
 import 'package:yf_code/manager/MessageStore.dart';
-import 'package:yf_code/manager/SendMessageManager.dart';
+import 'package:yf_code/manager/MessageManager.dart';
+import 'package:yf_code/model/AppSettings.dart';
 import 'package:yf_code/model/IMessage/FileMessageDisplay.dart';
 import 'package:yf_code/model/IMessage/IMessageDisplay.dart';
 import 'package:yf_code/model/IMessage/TextMessageDisplay.dart';
 import 'package:yf_code/model/MessageModel.dart';
+import 'package:yf_code/model/OnlineDeviceModel.dart';
+import 'package:yf_code/theme/AppColors.dart';
+import 'package:yf_code/ui/ProfilePage.dart';
+import 'package:yf_code/ui/widgets/AppChrome.dart';
+import 'package:yf_code/ui/widgets/PeerAvatar.dart';
 import 'package:yf_code/utils/log.dart';
 import 'package:yf_code/utils/page.dart';
 
@@ -41,28 +48,30 @@ class _ChatPageState extends State<ChatPage> {
   late final MessageModel _messageModel;
   int _lastMessageCount = 0;
 
-  String get _peerName =>
-      widget.device.name?.isNotEmpty == true ? widget.device.name! : '未知设备';
+  String get _peerName {
+    final name = widget.device.name;
+    if (name != null && name.isNotEmpty) return name;
+    return '未知设备';
+  }
 
+  String get _displayName => AppSettings.instance.displayNameOf(widget.device.deviceId, _peerName);
   String get _peerIp => widget.device.ipAddress ?? '';
   String? get _peerDeviceId => widget.device.deviceId;
+  bool get _online => OnlineDeviceModel.instance.deviceList.any((d) => d.deviceId == widget.device.deviceId);
 
   @override
   void initState() {
     super.initState();
-    _conversationId = _buildConversationId(
-      InitManager.deviceId,
-      widget.device.deviceId,
-    );
+    _conversationId = Message.buildConversationId(InitManager.deviceId, widget.device.deviceId);
     _messageModel = MessageStore.createMessageModel(_conversationId);
     _lastMessageCount = _messageModel.messages.length;
     _messageModel.addListener(_onMessagesChanged);
+    AppSettings.instance.addListener(_onChromeChanged);
+    OnlineDeviceModel.instance.addListener(_onChromeChanged);
   }
 
-  static String _buildConversationId(String? myDeviceId, String? peerDeviceId) {
-    final myId = myDeviceId ?? '';
-    final peerId = peerDeviceId ?? '';
-    return myId.compareTo(peerId) <= 0 ? '$myId:$peerId' : '$peerId:$myId';
+  void _onChromeChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onMessagesChanged() {
@@ -77,6 +86,8 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void dispose() {
     _messageModel.removeListener(_onMessagesChanged);
+    AppSettings.instance.removeListener(_onChromeChanged);
+    OnlineDeviceModel.instance.removeListener(_onChromeChanged);
     MessageStore.destroyMessageModel(_conversationId);
     _controller.dispose();
     _scrollController.dispose();
@@ -86,15 +97,11 @@ class _ChatPageState extends State<ChatPage> {
 
   bool _ensurePeerReady() {
     if (_peerIp.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('对方地址无效，无法发送')),
-      );
+      showAppToast(context, '对方地址无效，无法发送');
       return false;
     }
     if (_peerDeviceId == null || InitManager.deviceId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('设备信息未就绪，无法发送')),
-      );
+      showAppToast(context, '设备信息未就绪，无法发送');
       return false;
     }
     return true;
@@ -111,12 +118,10 @@ class _ChatPageState extends State<ChatPage> {
       _controller.clear();
     });
 
-    await SendMessageManager.sendMessage(msg, _peerIp, _peerDeviceId);
+    await MessageManager.sendMessage(msg, _peerIp, _peerDeviceId);
 
     if (!mounted) return;
-    setState(() {
-      _sending = false;
-    });
+    setState(() => _sending = false);
   }
 
   Future<void> _pickAndSendFile() async {
@@ -132,9 +137,7 @@ class _ChatPageState extends State<ChatPage> {
           : (picked.path.isNotEmpty ? File(picked.path).uri.pathSegments.last : '');
       if (name.isEmpty) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法获取文件名')),
-        );
+        showAppToast(context, '无法获取文件名');
         return;
       }
 
@@ -144,12 +147,10 @@ class _ChatPageState extends State<ChatPage> {
         sourcePath: picked.path.isEmpty ? null : picked.path,
         openContent: picked.openRead,
       );
-      await SendMessageManager.sendFile(local, _peerIp, _peerDeviceId);
+      await MessageManager.sendFile(local, _peerIp, _peerDeviceId);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('发送文件失败：$e')),
-      );
+      showAppToast(context, '发送文件失败：$e');
     } finally {
       if (mounted) {
         setState(() {
@@ -167,13 +168,9 @@ class _ChatPageState extends State<ChatPage> {
       await FileTransferManager.accept(transferId);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('接收失败：$e')),
-      );
+      showAppToast(context, '接收失败：$e');
     } finally {
-      if (mounted) {
-        setState(() => _fileActionBusy.remove(transferId));
-      }
+      if (mounted) setState(() => _fileActionBusy.remove(transferId));
     }
   }
 
@@ -183,35 +180,23 @@ class _ChatPageState extends State<ChatPage> {
     try {
       await FileTransferManager.reject(transferId);
     } finally {
-      if (mounted) {
-        setState(() => _fileActionBusy.remove(transferId));
-      }
+      if (mounted) setState(() => _fileActionBusy.remove(transferId));
     }
   }
 
   Future<void> _onFileTap(FileMessageDisplay file, {required bool mine}) async {
     switch (file.fileState) {
       case FileTransferState.send:
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(mine ? '等待对方接收文件' : '请先接收文件'),
-          ),
-        );
+        showAppToast(context, mine ? '等待对方接收文件' : '请先接收文件');
         return;
       case FileTransferState.transferring:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文件正在传输中')),
-        );
+        showAppToast(context, '文件正在传输中');
         return;
       case FileTransferState.rejected:
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(mine ? '对方已拒绝该文件' : '已拒绝该文件')),
-        );
+        showAppToast(context, mine ? '对方已拒绝该文件' : '已拒绝该文件');
         return;
       case FileTransferState.failed:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文件传输失败')),
-        );
+        showAppToast(context, '文件传输失败');
         return;
       case FileTransferState.success:
         break;
@@ -222,26 +207,18 @@ class _ChatPageState extends State<ChatPage> {
 
     final path = file.localPath;
     if (path == null || path.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('本地文件路径不可用')),
-      );
+      showAppToast(context, '本地文件路径不可用');
       return;
     }
     if (!await File(path).exists()) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('本地文件不存在或已被移动')),
-      );
+      showAppToast(context, '本地文件不存在或已被移动');
       return;
     }
 
     final result = await OpenFilex.open(path, type: file.mimeType);
     if (!mounted) return;
-    if (result.type != ResultType.done) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message)),
-      );
-    }
+    if (result.type != ResultType.done) showAppToast(context, result.message);
   }
 
   void _scrollToBottom() {
@@ -255,154 +232,174 @@ class _ChatPageState extends State<ChatPage> {
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final messages = _messageModel.messages;
-    final busy = _sending || _pickingFile;
-    return Scaffold(
-      body: Stack(
-        children: [
-          const _AtmosphereBackground(),
-          SafeArea(
-            child: Column(
-              children: [
-                _ChatHeader(
-                  name: _peerName,
-                  ip: _peerIp,
-                  onBack: () => gotoBack(context),
-                ),
-                Expanded(
-                  child: messages.isEmpty
-                      ? _EmptyChat(peerName: _peerName)
-                      : ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-                          itemCount: messages.length,
-                          itemBuilder: (context, index) {
-                            final msg = messages[index];
-                            return _MessageBubble(
-                              message: msg,
-                              myDeviceId: InitManager.deviceId,
-                              fileActionBusy: msg is FileMessageDisplay &&
-                                  _fileActionBusy.contains(msg.fileMessage.transferId),
-                              onAcceptFile: _acceptFile,
-                              onRejectFile: _rejectFile,
-                              onFileTap: _onFileTap,
-                            );
-                          },
-                        ),
-                ),
-                _Composer(
-                  controller: _controller,
-                  focusNode: _focusNode,
-                  busy: busy,
-                  onSend: _send,
-                  onAttach: _pickAndSendFile,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+  List<_ChatRow> _rowsOf(List<IMessageDisplay> messages) {
+    final rows = <_ChatRow>[];
+    String? lastDate;
+    for (final msg in messages) {
+      final label = _dateLabelOf(msg);
+      if (label != lastDate) {
+        rows.add(_ChatRow.date(label));
+        lastDate = label;
+      }
+      rows.add(_ChatRow.message(msg));
+    }
+    return rows;
   }
-}
 
-class _AtmosphereBackground extends StatelessWidget {
-  const _AtmosphereBackground();
+  String _dateLabelOf(IMessageDisplay message) {
+    final utc = message.baseMessage?.base?.sendTimestampUtc;
+    if (utc == null) return '今天';
+    final t = DateTime.fromMillisecondsSinceEpoch(utc.toInt(), isUtc: true).toLocal();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(t.year, t.month, t.day);
+    final diff = today.difference(day).inDays;
+    if (diff == 0) return '今天';
+    if (diff == 1) return '昨天';
+    if (diff < 7) {
+      const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+      return weekdays[t.weekday - 1];
+    }
+    return '${t.month}/${t.day}';
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFE4F0ED),
-            Color(0xFFEEF2EF),
-            Color(0xFFF4F1EB),
+    final c = context.colors;
+    final messages = _messageModel.messages;
+    final rows = _rowsOf(messages);
+    final busy = _sending || _pickingFile;
+    final meName = AppSettings.instance.nickname.isNotEmpty
+        ? AppSettings.instance.nickname
+        : (InitManager.deviceName ?? '我');
+    final meId = InitManager.deviceId ?? 'me';
+
+    return Scaffold(
+      backgroundColor: c.bg,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _ChatHeader(
+              id: widget.device.deviceId ?? _peerName,
+              name: _displayName,
+              online: _online,
+              lastSeen: lastSeenLabel(widget.device.updateTimestampUtc?.toInt()),
+              onBack: () => gotoBack(context),
+              onProfile: () => startPage(context, ProfilePage(device: widget.device)),
+            ),
+            Expanded(
+              child: messages.isEmpty
+                  ? _EmptyChat(peerName: _displayName)
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      itemCount: rows.length,
+                      itemBuilder: (context, index) {
+                        final row = rows[index];
+                        if (row.dateLabel != null) return _DatePill(label: row.dateLabel!);
+                        final msg = row.message!;
+                        return _MessageBubble(
+                          message: msg,
+                          myDeviceId: InitManager.deviceId,
+                          meId: meId,
+                          meName: meName,
+                          peerId: widget.device.deviceId ?? _peerName,
+                          peerName: _displayName,
+                          fileActionBusy: msg is FileMessageDisplay && _fileActionBusy.contains(msg.fileMessage.transferId),
+                          onAcceptFile: _acceptFile,
+                          onRejectFile: _rejectFile,
+                          onFileTap: _onFileTap,
+                        );
+                      },
+                    ),
+            ),
+            _Composer(controller: _controller, focusNode: _focusNode, busy: busy, onSend: _send, onAttach: _pickAndSendFile),
           ],
-          stops: [0.0, 0.45, 1.0],
         ),
       ),
     );
   }
 }
 
+class _ChatRow {
+  _ChatRow.date(this.dateLabel) : message = null;
+  _ChatRow.message(this.message) : dateLabel = null;
+
+  final String? dateLabel;
+  final IMessageDisplay? message;
+}
+
 class _ChatHeader extends StatelessWidget {
   const _ChatHeader({
+    required this.id,
     required this.name,
-    required this.ip,
+    required this.online,
+    required this.lastSeen,
     required this.onBack,
+    required this.onProfile,
   });
 
+  final String id;
   final String name;
-  final String ip;
+  final bool online;
+  final String lastSeen;
   final VoidCallback onBack;
+  final VoidCallback onProfile;
 
   @override
   Widget build(BuildContext context) {
-    final letter = name.isNotEmpty ? name.characters.first.toUpperCase() : '?';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 20, 8),
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.hairline))),
       child: Row(
         children: [
           IconButton(
             onPressed: onBack,
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-            color: const Color(0xFF152422),
+            icon: Icon(Icons.arrow_back, size: 19, color: c.textPrimary),
           ),
-          Container(
-            width: 40,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF1A9B90), Color(0xFF0E6E68)],
-              ),
-            ),
-            child: Text(
-              letter,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
+          GestureDetector(
+            onTap: onProfile,
+            child: PeerAvatar(id: id, name: name, size: 34, radius: 10, online: online),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF152422),
-                    letterSpacing: -0.3,
+            child: GestureDetector(
+              onTap: onProfile,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                  Text(
+                    online ? '在线' : '离线 · 最后在线 $lastSeen',
+                    style: TextStyle(fontSize: 11.5, color: c.textSecondary),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  ip.isEmpty ? '地址未知' : ip,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    color: Color(0xFF6A7C79),
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DatePill extends StatelessWidget {
+  const _DatePill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 2, 0, 10),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          decoration: BoxDecoration(color: c.surfaceAlt, borderRadius: BorderRadius.circular(999)),
+          child: Text(label, style: TextStyle(fontSize: 11.5, color: c.textTertiary)),
+        ),
       ),
     );
   }
@@ -415,50 +412,7 @@ class _EmptyChat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: const Color(0xFF0E6E68).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(
-                Icons.forum_outlined,
-                size: 30,
-                color: Color(0xFF0E6E68),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              '与 $peerName 开始对话',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF152422),
-                letterSpacing: -0.3,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              '可发送文字或文件，经局域网直连送达',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.45,
-                color: Color(0xFF6A7C79),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    return EmptyState(text: '与 $peerName 开始对话', sub: '可发送文字或文件，经局域网直连送达', icon: Icons.forum_outlined);
   }
 }
 
@@ -466,6 +420,10 @@ class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     required this.message,
     required this.myDeviceId,
+    required this.meId,
+    required this.meName,
+    required this.peerId,
+    required this.peerName,
     required this.fileActionBusy,
     required this.onAcceptFile,
     required this.onRejectFile,
@@ -474,6 +432,10 @@ class _MessageBubble extends StatelessWidget {
 
   final IMessageDisplay message;
   final String? myDeviceId;
+  final String meId;
+  final String meName;
+  final String peerId;
+  final String peerName;
   final bool fileActionBusy;
   final ValueChanged<String> onAcceptFile;
   final ValueChanged<String> onRejectFile;
@@ -482,57 +444,42 @@ class _MessageBubble extends StatelessWidget {
   bool get _isMine => message.baseMessage?.base?.fromDeviceId == myDeviceId;
 
   MessageStateType get _deliveryState =>
-      MessageStateType.fromCode(message.baseMessage?.base?.state ?? '') ??
-      MessageStateType.sending;
-
-  DateTime get _timestamp {
-    final utc = message.baseMessage?.base?.sendTimestampUtc;
-    if (utc == null) return DateTime.now();
-    return DateTime.fromMillisecondsSinceEpoch(utc.toInt(), isUtc: true)
-        .toLocal();
-  }
+      MessageStateType.fromCode(message.baseMessage?.base?.state ?? '') ?? MessageStateType.sending;
 
   String get _timeLabel {
-    final t = _timestamp;
-    final h = t.hour.toString().padLeft(2, '0');
-    final m = t.minute.toString().padLeft(2, '0');
-    return '$h:$m';
+    final utc = message.baseMessage?.base?.sendTimestampUtc;
+    if (utc == null) return '';
+    final t = DateTime.fromMillisecondsSinceEpoch(utc.toInt(), isUtc: true).toLocal();
+    return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final mine = _isMine;
     final isFile = message is FileMessageDisplay;
+    final radius = mine
+        ? const BorderRadius.only(topLeft: Radius.circular(14), topRight: Radius.circular(4), bottomLeft: Radius.circular(14), bottomRight: Radius.circular(14))
+        : const BorderRadius.only(topLeft: Radius.circular(4), topRight: Radius.circular(14), bottomLeft: Radius.circular(14), bottomRight: Radius.circular(14));
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
       child: Row(
-        mainAxisAlignment:
-            mine ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment: mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!mine) const SizedBox(width: 4),
+          if (!mine) PeerAvatar(id: peerId, name: peerName, size: 38, radius: 11, showStatus: false),
+          if (!mine) const SizedBox(width: 8),
           Flexible(
             child: Column(
-              crossAxisAlignment:
-                  mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
                 Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.sizeOf(context).width * 0.78,
-                  ),
+                  constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.72),
                   decoration: BoxDecoration(
-                    color: mine
-                        ? const Color(0xFF0E6E68)
-                        : const Color(0xF2FFFFFF),
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(16),
-                      topRight: const Radius.circular(16),
-                      bottomLeft: Radius.circular(mine ? 16 : 4),
-                      bottomRight: Radius.circular(mine ? 4 : 16),
-                    ),
-                    border: mine
-                        ? null
-                        : Border.all(color: const Color(0x1A0E6E68)),
+                    color: mine ? c.accent : c.raised,
+                    borderRadius: radius,
+                    border: mine ? null : Border.all(color: c.bubbleBorder),
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: isFile
@@ -540,49 +487,24 @@ class _MessageBubble extends StatelessWidget {
                           file: message as FileMessageDisplay,
                           mine: mine,
                           busy: fileActionBusy,
-                          onTap: () => onFileTap(
-                            message as FileMessageDisplay,
-                            mine: mine,
-                          ),
-                          onAccept: () => onAcceptFile(
-                              (message as FileMessageDisplay).fileMessage.transferId!),
-                          onReject: () => onRejectFile(
-                              (message as FileMessageDisplay).fileMessage.transferId!),
+                          onTap: () => onFileTap(message as FileMessageDisplay, mine: mine),
+                          onAccept: () => onAcceptFile((message as FileMessageDisplay).fileMessage.transferId!),
+                          onReject: () => onRejectFile((message as FileMessageDisplay).fileMessage.transferId!),
                         )
                       : Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                           child: SelectableText(
-                            message is TextMessageDisplay
-                                ? ((message as TextMessageDisplay).textMessage.text ?? '')
-                                : '',
-                            cursorColor: mine
-                                ? Colors.white
-                                : const Color(0xFF0E6E68),
-                            style: TextStyle(
-                              fontSize: 15,
-                              height: 1.35,
-                              color: mine
-                                  ? Colors.white
-                                  : const Color(0xFF152422),
-                            ),
+                            message is TextMessageDisplay ? ((message as TextMessageDisplay).textMessage.text ?? '') : '',
+                            cursorColor: mine ? c.onAccent : c.accent,
+                            style: TextStyle(fontSize: 14, height: 1.45, color: mine ? c.onAccent : c.textPrimary),
                           ),
                         ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      _timeLabel,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Color(0xFF6A7C79),
-                        fontFeatures: [FontFeature.tabularFigures()],
-                      ),
-                    ),
+                    Text(_timeLabel, style: TextStyle(fontSize: 10.5, color: c.textTertiary)),
                     if (mine) ...[
                       const SizedBox(width: 6),
                       _StatusIcon(state: _deliveryState),
@@ -592,7 +514,8 @@ class _MessageBubble extends StatelessWidget {
               ],
             ),
           ),
-          if (mine) const SizedBox(width: 4),
+          if (mine) const SizedBox(width: 8),
+          if (mine) PeerAvatar(id: meId, name: meName, size: 38, radius: 11, showStatus: false),
         ],
       ),
     );
@@ -619,9 +542,7 @@ class _FileBubbleBody extends StatelessWidget {
   static String formatSize(int? bytes) {
     if (bytes == null || bytes < 0) return '';
     if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    }
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
   }
 
@@ -646,43 +567,37 @@ class _FileBubbleBody extends StatelessWidget {
     if (m.startsWith('video/')) return Icons.movie_outlined;
     if (m.startsWith('audio/')) return Icons.audiotrack_outlined;
     if (m.contains('pdf')) return Icons.picture_as_pdf_outlined;
-    if (m.contains('zip') || m.contains('compressed')) {
-      return Icons.folder_zip_outlined;
-    }
+    if (m.contains('zip') || m.contains('compressed')) return Icons.folder_zip_outlined;
     return Icons.insert_drive_file_outlined;
   }
 
-  Color _stateColor({required bool mine}) {
+  Color _stateColor(AppColors c) {
     switch (file.fileState) {
       case FileTransferState.send:
-        return mine ? const Color(0xFFFFE08A) : const Color(0xFF0E6E68);
+        return mine ? c.onAccentMuted : c.accent;
       case FileTransferState.transferring:
-        return mine ? const Color(0xFFB8E0FF) : const Color(0xFF2A7CB8);
+        return mine ? c.onAccent : c.accent;
       case FileTransferState.success:
-        return mine ? const Color(0xFFB6F0C8) : const Color(0xFF2A9B6A);
+        return mine ? c.onAccent : c.online;
       case FileTransferState.rejected:
-        return mine ? const Color(0xFFFFC4B8) : const Color(0xFFC45C4A);
       case FileTransferState.failed:
-        return mine ? const Color(0xFFFFC4B8) : const Color(0xFFC45C4A);
+        return c.danger;
       case null:
-        throw UnimplementedError();
+        return c.textTertiary;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final fg = mine ? Colors.white : const Color(0xFF152422);
-    final sub = mine
-        ? Colors.white.withValues(alpha: 0.78)
-        : const Color(0xFF6A7C79);
+    final c = context.colors;
+    final fg = mine ? c.onAccent : c.textPrimary;
+    final sub = mine ? c.onAccentMuted : c.textTertiary;
     final transferring = file.fileState == FileTransferState.transferring;
     final sizeLabel = transferring && file.total != null && file.total! > 0
         ? '${formatSize(file.current)} / ${formatSize(file.total)}'
         : formatSize(file.totalSize);
-    final showActions =
-        !mine && file.fileState == FileTransferState.send && !busy;
-    final showProgress =
-        file.fileState == FileTransferState.transferring || busy;
+    final showActions = !mine && file.fileState == FileTransferState.send && !busy;
+    final showProgress = file.fileState == FileTransferState.transferring || busy;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -693,72 +608,27 @@ class _FileBubbleBody extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    width: 42,
-                    height: 42,
+                    width: 34,
+                    height: 34,
                     decoration: BoxDecoration(
-                      color: mine
-                          ? Colors.white.withValues(alpha: 0.14)
-                          : const Color(0xFF0E6E68).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
+                      color: mine ? const Color(0x2915171C) : c.surfaceAlt,
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(
-                      iconForMime(file.mimeType),
-                      size: 22,
-                      color: fg,
-                    ),
+                    child: Icon(iconForMime(file.mimeType), size: 16, color: mine ? c.onAccent : c.textSecondary),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          file.name ?? '文件',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            height: 1.3,
-                            color: fg,
-                          ),
-                        ),
-                        if (sizeLabel.isNotEmpty) ...[
-                          const SizedBox(height: 3),
-                          Text(
-                            sizeLabel,
-                            style: TextStyle(fontSize: 12.5, color: sub),
-                          ),
-                        ],
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: mine
-                                ? Colors.white.withValues(alpha: 0.16)
-                                : _stateColor(mine: false)
-                                    .withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            stateLabel(file.fileState!, mine: mine),
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: mine
-                                  ? _stateColor(mine: true)
-                                  : _stateColor(mine: false),
-                            ),
-                          ),
-                        ),
+                        Text(file.name ?? '文件', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: fg)),
+                        if (sizeLabel.isNotEmpty) Text(sizeLabel, style: TextStyle(fontSize: 11.5, color: sub)),
+                        const SizedBox(height: 4),
+                        Text(stateLabel(file.fileState!, mine: mine), style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: _stateColor(c))),
                       ],
                     ),
                   ),
@@ -768,16 +638,7 @@ class _FileBubbleBody extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: EdgeInsets.fromLTRB(
-            12,
-            showProgress || showActions || (!mine &&
-                    file.fileState == FileTransferState.success &&
-                    file.localPath != null)
-                ? 10
-                : 12,
-            12,
-            12,
-          ),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -787,17 +648,11 @@ class _FileBubbleBody extends StatelessWidget {
                   child: LinearProgressIndicator(
                     minHeight: 3,
                     value: file.progress,
-                    color: mine ? Colors.white : const Color(0xFF0E6E68),
-                    backgroundColor: mine
-                        ? Colors.white.withValues(alpha: 0.2)
-                        : const Color(0x1A0E6E68),
+                    color: mine ? c.onAccent : c.accent,
+                    backgroundColor: mine ? const Color(0x3315171C) : c.border,
                   ),
                 ),
-                if (showActions ||
-                    (!mine &&
-                        file.fileState == FileTransferState.success &&
-                        file.localPath != null))
-                  const SizedBox(height: 12),
+                if (showActions) const SizedBox(height: 10),
               ],
               if (showActions)
                 Row(
@@ -806,8 +661,8 @@ class _FileBubbleBody extends StatelessWidget {
                       child: OutlinedButton(
                         onPressed: onReject,
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFFC45C4A),
-                          side: const BorderSide(color: Color(0x66C45C4A)),
+                          foregroundColor: c.danger,
+                          side: BorderSide(color: c.danger.withValues(alpha: 0.4)),
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           visualDensity: VisualDensity.compact,
                         ),
@@ -819,7 +674,8 @@ class _FileBubbleBody extends StatelessWidget {
                       child: FilledButton(
                         onPressed: onAccept,
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF0E6E68),
+                          backgroundColor: c.accent,
+                          foregroundColor: c.onAccent,
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           visualDensity: VisualDensity.compact,
                         ),
@@ -828,13 +684,8 @@ class _FileBubbleBody extends StatelessWidget {
                     ),
                   ],
                 ),
-              if (!mine &&
-                  file.fileState == FileTransferState.success &&
-                  file.localPath != null)
-                Text(
-                  '已保存至本地',
-                  style: TextStyle(fontSize: 11.5, color: sub),
-                ),
+              if (!mine && file.fileState == FileTransferState.success && file.localPath != null)
+                Text('已保存至本地', style: TextStyle(fontSize: 11.5, color: sub)),
             ],
           ),
         ),
@@ -850,33 +701,23 @@ class _StatusIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     switch (state) {
       case MessageStateType.sending:
-        return const SizedBox(
+        return SizedBox(
           width: 12,
           height: 12,
-          child: CircularProgressIndicator(
-            strokeWidth: 1.5,
-            color: Color(0xFF6A7C79),
-          ),
+          child: CircularProgressIndicator(strokeWidth: 1.5, color: c.textTertiary),
         );
       case MessageStateType.success:
-        return const Icon(
-          Icons.done_rounded,
-          size: 14,
-          color: Color(0xFF2A9B6A),
-        );
+        return Icon(Icons.done_rounded, size: 14, color: c.online);
       case MessageStateType.fail:
-        return const Icon(
-          Icons.error_outline_rounded,
-          size: 14,
-          color: Color(0xFFC45C4A),
-        );
+        return Icon(Icons.error_outline_rounded, size: 14, color: c.danger);
     }
   }
 }
 
-class _Composer extends StatelessWidget {
+class _Composer extends StatefulWidget {
   const _Composer({
     required this.controller,
     required this.focusNode,
@@ -892,84 +733,118 @@ class _Composer extends StatelessWidget {
   final VoidCallback onAttach;
 
   @override
+  State<_Composer> createState() => _ComposerState();
+}
+
+class _ComposerState extends State<_Composer> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _Composer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onChanged);
+      widget.controller.addListener(_onChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onChanged);
+    super.dispose();
+  }
+
+  void _onChanged() => setState(() {});
+
+  @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(4, 6, 6, 6),
-        decoration: BoxDecoration(
-          color: const Color(0xF2FFFFFF),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0x1A0E6E68)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            IconButton(
-              onPressed: busy ? null : onAttach,
+    final c = context.colors;
+    final hasText = widget.controller.text.trim().isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border(top: BorderSide(color: c.hairline)),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 34,
+            height: 34,
+            child: IconButton(
+              onPressed: widget.busy ? null : widget.onAttach,
               tooltip: '发送文件',
-              icon: Icon(
-                Icons.attach_file_rounded,
-                color: Color(0xFF0E6E68).withValues(alpha: busy ? 0.35 : 1),
+              padding: EdgeInsets.zero,
+              style: IconButton.styleFrom(
+                backgroundColor: c.surfaceAlt,
+                foregroundColor: c.textSecondary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
+              icon: const Icon(Icons.attach_file_rounded, size: 17),
             ),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                focusNode: focusNode,
-                minLines: 1,
-                maxLines: 5,
-                enabled: !busy,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => onSend(),
-                inputFormatters: [
-                  LengthLimitingTextInputFormatter(2000),
-                ],
-                style: const TextStyle(
-                  fontSize: 15,
-                  color: Color(0xFF152422),
-                  height: 1.35,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: widget.controller,
+              focusNode: widget.focusNode,
+              minLines: 1,
+              maxLines: 5,
+              enabled: !widget.busy,
+              textInputAction: TextInputAction.send,
+              onSubmitted: (_) => widget.onSend(),
+              inputFormatters: [LengthLimitingTextInputFormatter(2000)],
+              style: TextStyle(fontSize: 14, color: c.textPrimary, height: 1.35),
+              decoration: InputDecoration(
+                hintText: '发送消息...',
+                hintStyle: TextStyle(color: c.textTertiary, fontSize: 14),
+                filled: true,
+                fillColor: c.surfaceAlt,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: c.border),
                 ),
-                decoration: const InputDecoration(
-                  hintText: '输入消息…',
-                  hintStyle: TextStyle(
-                    color: Color(0xFF6A7C79),
-                    fontSize: 15,
-                  ),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(vertical: 10),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: c.accent),
                 ),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Material(
-              color: const Color(0xFF0E6E68),
-              borderRadius: BorderRadius.circular(14),
-              child: InkWell(
-                onTap: busy ? null : onSend,
-                borderRadius: BorderRadius.circular(14),
-                child: SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: busy
-                      ? const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(
-                          Icons.send_rounded,
-                          size: 20,
-                          color: Colors.white,
-                        ),
+                disabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: c.border),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 34,
+            height: 34,
+            child: IconButton(
+              onPressed: widget.busy || !hasText ? null : widget.onSend,
+              padding: EdgeInsets.zero,
+              style: IconButton.styleFrom(
+                backgroundColor: hasText ? c.accent : c.surfaceAlt,
+                foregroundColor: hasText ? c.onAccent : c.textTertiary,
+                disabledBackgroundColor: c.surfaceAlt,
+                disabledForegroundColor: c.textTertiary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: widget.busy
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: hasText ? c.onAccent : c.textTertiary),
+                    )
+                  : const Icon(Icons.send_rounded, size: 16),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:yf_code/bean/Result.dart';
-import 'package:yf_code/manager/SendMessageManager.dart';
+import 'package:yf_code/manager/MessageManager.dart';
 import 'package:yf_code/utils/log.dart';
 import 'package:yf_code/utils/NetworkUtils.dart';
 
@@ -82,7 +82,7 @@ class TextChannel {
           expectedLength = null;
           final text = utf8.decode(payload);
           iLog("收到文本消息 from=$ip:$port text=$text");
-          SendMessageManager.onTextMessage(text, ip);
+          MessageManager.onTextMessage(text, ip);
         }
       },
       onError: (e) {

@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:yf_code/bean/ConversationBean.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
 import 'package:yf_code/manager/OnlineDeviceManager.dart';
+import 'package:yf_code/model/AppSettings.dart';
 import 'package:yf_code/model/ConversationModel.dart';
 import 'package:yf_code/model/OnlineDeviceModel.dart';
+import 'package:yf_code/theme/AppColors.dart';
 import 'package:yf_code/ui/ChatPage.dart';
+import 'package:yf_code/ui/ProfilePage.dart';
+import 'package:yf_code/ui/widgets/AppChrome.dart';
+import 'package:yf_code/ui/widgets/PeerAvatar.dart';
 import 'package:yf_code/utils/page.dart';
 
 class ConversationPage extends StatefulWidget {
@@ -23,6 +28,7 @@ class _ConversationPageState extends State<ConversationPage> {
     super.initState();
     ConversationModel.instance.addListener(_onChanged);
     OnlineDeviceModel.instance.addListener(_onChanged);
+    AppSettings.instance.addListener(_onChanged);
     _hydrateDevices();
   }
 
@@ -30,6 +36,7 @@ class _ConversationPageState extends State<ConversationPage> {
   void dispose() {
     ConversationModel.instance.removeListener(_onChanged);
     OnlineDeviceModel.instance.removeListener(_onChanged);
+    AppSettings.instance.removeListener(_onChanged);
     super.dispose();
   }
 
@@ -74,173 +81,51 @@ class _ConversationPageState extends State<ConversationPage> {
     return '未知设备';
   }
 
-  Future<void> _openConversation(ConversationBean conversation) async {
+  Future<DeviceBean?> _resolveDevice(ConversationBean conversation) async {
     final id = conversation.conversationDeviceId;
-    if (id == null || id.isEmpty) return;
+    if (id == null || id.isEmpty) return null;
     var device = _deviceOf(conversation);
     device ??= await OnlineDeviceManager.getDeviceInfo(id);
+    return device;
+  }
+
+  Future<void> _openChat(ConversationBean conversation) async {
+    final device = await _resolveDevice(conversation);
     if (!mounted) return;
     if (device == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('找不到该设备信息')),
-      );
+      showAppToast(context, '找不到该设备信息');
       return;
     }
     startPage(context, ChatPage(device: device));
   }
 
+  Future<void> _openProfile(ConversationBean conversation) async {
+    final device = await _resolveDevice(conversation);
+    if (!mounted) return;
+    if (device == null) {
+      showAppToast(context, '找不到该设备信息');
+      return;
+    }
+    startPage(context, ProfilePage(device: device));
+  }
+
   @override
   Widget build(BuildContext context) {
     final conversations = ConversationModel.instance.deviceList;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _SectionHeader(count: conversations.length),
-        Expanded(
-          child: conversations.isEmpty
-              ? const _EmptyConversations()
-              : _ConversationList(
-                  conversations: conversations,
-                  peerNameOf: _peerName,
-                  onTap: _openConversation,
-                ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
-      child: Row(
-        children: [
-          const Text(
-            '会话',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.4,
-              color: Color(0xFF3D4F4C),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0E6E68).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              '$count',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF0E6E68),
-              ),
-            ),
-          ),
-          const Spacer(),
-          const Text(
-            '按最近消息排序',
-            style: TextStyle(
-              fontSize: 12,
-              color: Color(0xFF6A7C79),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptyConversations extends StatelessWidget {
-  const _EmptyConversations();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.chat_bubble_outline_rounded,
-              size: 56,
-              color: Color(0xFF0E6E68),
-            ),
-            SizedBox(height: 28),
-            Text(
-              '还没有会话',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF152422),
-                letterSpacing: -0.3,
-              ),
-            ),
-            SizedBox(height: 10),
-            Text(
-              '在「在线」页选择设备开始聊天，会话会出现在这里',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.45,
-                color: Color(0xFF6A7C79),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ConversationList extends StatelessWidget {
-  const _ConversationList({
-    required this.conversations,
-    required this.peerNameOf,
-    required this.onTap,
-  });
-
-  final List<ConversationBean> conversations;
-  final String Function(ConversationBean) peerNameOf;
-  final ValueChanged<ConversationBean> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(24, 4, 24, 28),
+    if (conversations.isEmpty) {
+      return const EmptyState(text: '暂时没有会话', sub: '发现在线设备后，向他打个招呼吧');
+    }
+    return ListView.builder(
       itemCount: conversations.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final conversation = conversations[index];
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: 1),
-          duration: Duration(milliseconds: 280 + index * 60),
-          curve: Curves.easeOutCubic,
-          builder: (context, value, child) {
-            return Opacity(
-              opacity: value,
-              child: Transform.translate(
-                offset: Offset(0, 12 * (1 - value)),
-                child: child,
-              ),
-            );
-          },
-          child: _ConversationTile(
-            conversation: conversation,
-            peerName: peerNameOf(conversation),
-            onTap: () => onTap(conversation),
-          ),
+        final rawName = _peerName(conversation);
+        final displayName = AppSettings.instance.displayNameOf(conversation.conversationDeviceId, rawName);
+        return _ConversationTile(
+          conversation: conversation,
+          displayName: displayName,
+          onAvatarTap: () => _openProfile(conversation),
+          onRowTap: () => _openChat(conversation),
         );
       },
     );
@@ -248,147 +133,74 @@ class _ConversationList extends StatelessWidget {
 }
 
 class _ConversationTile extends StatelessWidget {
-  const _ConversationTile({required this.conversation, required this.peerName, required this.onTap});
+  const _ConversationTile({
+    required this.conversation,
+    required this.displayName,
+    required this.onAvatarTap,
+    required this.onRowTap,
+  });
 
   final ConversationBean conversation;
-  final String peerName;
-  final VoidCallback onTap;
-
-  String get _timeLabel {
-    final ts = conversation.lastMessagesTimestampUtc;
-    if (ts == null) return '';
-    final last = DateTime.fromMillisecondsSinceEpoch(ts, isUtc: true);
-    final diff = DateTime.now().toUtc().difference(last);
-    if (diff.inSeconds < 60) return '刚刚';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前';
-    final local = last.toLocal();
-    final now = DateTime.now();
-    if (local.year == now.year && local.month == now.month && local.day == now.day) {
-      return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-    }
-    return '${local.month}/${local.day}';
-  }
+  final String displayName;
+  final VoidCallback onAvatarTap;
+  final VoidCallback onRowTap;
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final preview = conversation.lastMessagesPreview;
     final subtitle = (preview != null && preview.isNotEmpty) ? preview : '暂无消息';
     final online = conversation.isOnline();
+    final id = conversation.conversationDeviceId ?? displayName;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          decoration: BoxDecoration(
-            color: const Color(0xF2FFFFFF),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0x1A0E6E68)),
-          ),
+        onTap: onRowTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.hairline))),
           child: Row(
             children: [
-              _Avatar(label: peerName, dimmed: !online),
-              const SizedBox(width: 14),
+              GestureDetector(
+                onTap: onAvatarTap,
+                child: PeerAvatar(id: id, name: displayName, size: 46, online: online),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      peerName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: online
-                            ? const Color(0xFF152422)
-                            : const Color(0xFF3D4F4C),
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.textPrimary),
+                          ),
+                        ),
+                        Text(
+                          relativeTimeLabel(conversation.lastMessagesTimestampUtc),
+                          style: TextStyle(fontSize: 12, color: c.textTertiary, fontFamily: kMonoFont),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: Color(0xFF6A7C79),
+                    const SizedBox(height: 3),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 13, color: c.textSecondary),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    _timeLabel,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFF6A7C79),
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: online
-                          ? const Color(0xFF2A9B6A)
-                          : const Color(0xFFB8860B),
-                    ),
-                  ),
-                ],
-              ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.label, this.dimmed = false});
-
-  final String label;
-  final bool dimmed;
-
-  @override
-  Widget build(BuildContext context) {
-    final letter = label.isNotEmpty ? label.characters.first.toUpperCase() : '?';
-    final bg = Color.lerp(
-      const Color(0xFF1A9B90),
-      const Color(0xFF3D4F4C),
-      dimmed ? 0.45 : 0.15,
-    )!;
-
-    return Container(
-      width: 46,
-      height: 46,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            bg,
-            Color.lerp(bg, Colors.black, 0.18)!,
-          ],
-        ),
-      ),
-      child: Text(
-        letter,
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-          color: Colors.white.withValues(alpha: dimmed ? 0.75 : 1),
         ),
       ),
     );

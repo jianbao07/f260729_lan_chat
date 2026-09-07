@@ -11,7 +11,6 @@ import 'package:yf_code/channel/FileByteChannel.dart';
 import 'package:yf_code/session/FileTransferSession.dart';
 import 'package:yf_code/manager/AppFileStore.dart';
 import 'package:yf_code/manager/MessageManager.dart';
-import 'package:yf_code/manager/SendMessageManager.dart';
 import 'package:yf_code/ui/ReceiveFileDialog.dart';
 import 'package:yf_code/utils/FileUtils.dart';
 import 'package:yf_code/utils/log.dart';
@@ -102,7 +101,7 @@ class FileTransferManager {
       cancel(transferId);
     });
 
-    await SendMessageManager.sendMessage(bean, ip, deviceId);
+    await MessageManager.sendMessage(bean, ip, deviceId);
     MessageManager.updateFile(transferId, state: FileTransferState.send, localPath: localPath);
     iLog("已发送文件 offer transferId=$transferId port=$port");
   }
@@ -233,7 +232,7 @@ class FileTransferManager {
     session.state = FileTransferState.transferring;
     MessageManager.updateFile(transferId, state: FileTransferState.transferring);
     final reply = ReplySendFileBean.buildAccept(offer);
-    await SendMessageManager.sendMessage(
+    await MessageManager.sendMessage(
       reply,
       session.peerIp,
       session.peerDeviceId,
@@ -262,7 +261,7 @@ class FileTransferManager {
       );
       session.state = FileTransferState.success;
       final ack = AckFileBean.buildSuccess(offer, receiverLocalPath: path);
-      await SendMessageManager.sendMessage(
+      await MessageManager.sendMessage(
         ack,
         session.peerIp,
         session.peerDeviceId,
@@ -273,7 +272,7 @@ class FileTransferManager {
       iLog("接收失败 transferId=$transferId: $e");
       session.state = FileTransferState.failed;
       final ack = AckFileBean.buildFailed(offer);
-      await SendMessageManager.sendMessage(
+      await MessageManager.sendMessage(
         ack,
         session.peerIp,
         session.peerDeviceId,
@@ -300,7 +299,7 @@ class FileTransferManager {
     session.state = FileTransferState.rejected;
     MessageManager.updateFile(transferId, state: FileTransferState.rejected);
     final reply = ReplySendFileBean.buildRejected(offer);
-    await SendMessageManager.sendMessage(
+    await MessageManager.sendMessage(
       reply,
       session.peerIp,
       session.peerDeviceId,

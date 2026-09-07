@@ -4,6 +4,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:yf_code/manager/MessageStore.dart';
 import 'package:yf_code/manager/OnlineDeviceManager.dart';
+import 'package:yf_code/model/AppSettings.dart';
 import 'package:yf_code/channel/TextChannel.dart';
 
 class InitManager{
@@ -11,16 +12,22 @@ class InitManager{
 
   static String? deviceId;
   static String? deviceName;
+  static String? rawDeviceName;
 
-  static late String packageName;
-  static late String appName;
-  static late String version;
-  static late String buildNumber;
+  static String packageName = '';
+  static String appName = '';
+  static String version = '—';
+  static String buildNumber = '';
 
   static void initApp()async{
     await _getDeviceInfo();
     await _getPackageInfo();
-    OnlineDeviceManager.startBeat();
+    await AppSettings.instance.load();
+    final nickname = AppSettings.instance.nickname;
+    if (nickname.isNotEmpty) deviceName = nickname;
+    if (AppSettings.instance.discoverable) {
+      OnlineDeviceManager.startBeat();
+    }
     OnlineDeviceManager.listenerBeat();
     TextChannel.init();
     await MessageStore.init();
@@ -49,6 +56,7 @@ class InitManager{
       deviceId = linuxInfo.machineId;
       deviceName = linuxInfo.name;
     }
+    rawDeviceName = deviceName;
   }
 
   static Future<void> _getPackageInfo() async {

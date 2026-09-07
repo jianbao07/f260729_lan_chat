@@ -101,6 +101,17 @@ class OnlineDeviceManager {
     _beatTimer = Timer.periodic(const Duration(milliseconds: _HEART_INTERVAL), (_) => sendBeat());
   }
 
+  static void stopBeat() {
+    _beatTimer?.cancel();
+    _beatTimer = null;
+    _beatSocket?.close();
+    _beatSocket = null;
+  }
+
+  static void refreshNow() {
+    updateList();
+  }
+
   static void listenerBeat() async {
     _listenerSocket?.close();
 

@@ -5,6 +5,7 @@ import 'package:yf_code/bean/TextMessageBean.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
 import 'package:yf_code/enum/MessageStateType.dart';
 import 'package:yf_code/enum/MessageType.dart';
+import 'package:yf_code/utils/CryptoUtils.dart';
 
 /// conversation_id : "xxx"
 /// from_device_id : "xxx"
@@ -74,14 +75,18 @@ abstract class Message{
     return base.fromDeviceId ?? base.toDeviceId ?? '';
   }
 
+  static String buildConversationId(String? deviceIdA, String? deviceIdB) {
+    final a = deviceIdA ?? '';
+    final b = deviceIdB ?? '';
+    return CryptoUtils.md5(a.compareTo(b) <= 0 ? '$a:$b' : '$b:$a');
+  }
+
   bool initBase(String? myDeviceId, String? deviceId){
     final base = this.base ?? BaseMessageBean();
     base.fromDeviceId ??= myDeviceId;
     base.toDeviceId ??= deviceId;
     if (myDeviceId != null && deviceId != null) {
-      base.conversationId ??= myDeviceId.compareTo(deviceId) <= 0
-          ? '$myDeviceId:$deviceId'
-          : '$deviceId:$myDeviceId';
+      base.conversationId ??= buildConversationId(myDeviceId, deviceId);
     }
     base.sendTimestampUtc ??=
         DateTime.now().toUtc().millisecondsSinceEpoch;

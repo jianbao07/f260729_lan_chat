@@ -9,6 +9,31 @@ class NetworkUtils {
     return ip;
   }
 
+  /// 当前网段，如 192.168.1.0/24；拿不到则返回 null。
+  static Future<String?> getLanCidr() async {
+    final info = NetworkInfo();
+    final ip = await info.getWifiIP();
+    final subnet = await info.getWifiSubmask();
+    if (ip == null || subnet == null || ip.isEmpty || subnet.isEmpty) return null;
+    final ipParts = ip.split('.');
+    final maskParts = subnet.split('.');
+    if (ipParts.length != 4 || maskParts.length != 4) return null;
+    try {
+      final network = <String>[];
+      var cidr = 0;
+      for (var i = 0; i < 4; i++) {
+        final ipOctet = int.parse(ipParts[i]);
+        final maskOctet = int.parse(maskParts[i]);
+        if (ipOctet < 0 || ipOctet > 255 || maskOctet < 0 || maskOctet > 255) return null;
+        network.add((ipOctet & maskOctet).toString());
+        cidr += maskOctet.toRadixString(2).replaceAll('0', '').length;
+      }
+      return '${network.join('.')}/$cidr';
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// 获取当前局域网广播地址。
   /// 已连接局域网时根据 IP 与子网掩码计算；未连接则返回 null。
   static Future<String?> getBroadcastAddress() async {

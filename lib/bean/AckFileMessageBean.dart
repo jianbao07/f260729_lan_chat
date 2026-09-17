@@ -6,7 +6,7 @@ import 'package:yf_code/manager/MessageStore.dart';
 
 /// transfer_id : "xxx"
 /// type : "file"
-/// base : {"conversation_id":"xxx","from_device_id":"xxx","to_device_id":"yyy","send_timestamp_utc":1785173158277,"success_timestamp_utc":1785173158277,"fail_timestamp_utc":1785173158277,"state":"sending"}
+/// base : {"conversation_id":"xxx","from_device_id":"xxx","to_device_id":"yyy","send_timestamp_utc":1785173158277,"arrive_timestamp_utc":1785173158277,"success_timestamp_utc":1785173158277,"fail_timestamp_utc":1785173158277,"state":"sending"}
 /// state : "success"
 /// receiver_local_path : "/storage/emulated/0/..../新建文本文件.txt"
 

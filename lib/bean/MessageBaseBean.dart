@@ -11,6 +11,7 @@ import 'package:yf_code/utils/CryptoUtils.dart';
 /// from_device_id : "xxx"
 /// to_device_id : "yyy"
 /// send_timestamp_utc : 1785173158277
+/// arrive_timestamp_utc : 1785173158277
 /// success_timestamp_utc : 1785173158277
 /// fail_timestamp_utc : 1785173158277
 /// state : "sending"
@@ -22,6 +23,7 @@ class MessageBaseBean {
     this.fromDeviceId,
     this.toDeviceId,
     this.sendTimestampUtc,
+    this.arriveTimestampUtc,
     this.successTimestampUtc,
     this.failTimestampUtc,
     this.state,
@@ -33,6 +35,7 @@ class MessageBaseBean {
     fromDeviceId = json['from_device_id'];
     toDeviceId = json['to_device_id'];
     sendTimestampUtc = json['send_timestamp_utc'];
+    arriveTimestampUtc = json['arrive_timestamp_utc'];
     successTimestampUtc = json['success_timestamp_utc'];
     failTimestampUtc = json['fail_timestamp_utc'];
     state = json['state'];
@@ -42,6 +45,8 @@ class MessageBaseBean {
   String? fromDeviceId;
   String? toDeviceId;
   num? sendTimestampUtc;
+  /// 接收方本地到达时间；发送方为空
+  num? arriveTimestampUtc;
   num? successTimestampUtc;
   num? failTimestampUtc;
   String? state;
@@ -53,6 +58,7 @@ class MessageBaseBean {
     map['from_device_id'] = fromDeviceId;
     map['to_device_id'] = toDeviceId;
     map['send_timestamp_utc'] = sendTimestampUtc;
+    map['arrive_timestamp_utc'] = arriveTimestampUtc;
     map['success_timestamp_utc'] = successTimestampUtc;
     map['fail_timestamp_utc'] = failTimestampUtc;
     map['state'] = state;

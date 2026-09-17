@@ -192,6 +192,8 @@ class MessageManager {
 
   static void onMessageReceived(Message message) {
     message.base?.isSender=false;
+    message.base?.arriveTimestampUtc =
+        DateTime.now().toUtc().millisecondsSinceEpoch;
     MessageStore.addMessage(message);
     _addMessage(message);
   }

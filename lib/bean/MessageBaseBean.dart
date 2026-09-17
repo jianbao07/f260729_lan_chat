@@ -1,7 +1,7 @@
-import 'package:yf_code/bean/AckFileBean.dart';
-import 'package:yf_code/bean/ReplySendFileBean.dart';
-import 'package:yf_code/bean/SendFileBean.dart';
-import 'package:yf_code/bean/TextMessageBean.dart';
+import 'package:yf_code/bean/AckFileMessageBean.dart';
+import 'package:yf_code/bean/MessageReplySendFileBean.dart';
+import 'package:yf_code/bean/MessageSendFileBean.dart';
+import 'package:yf_code/bean/MessageTextBean.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
 import 'package:yf_code/enum/MessageStateType.dart';
 import 'package:yf_code/enum/MessageType.dart';
@@ -16,8 +16,8 @@ import 'package:yf_code/utils/CryptoUtils.dart';
 /// state : "sending"
 /// is_sender : true
 
-class BaseMessageBean {
-  BaseMessageBean({
+class MessageBaseBean {
+  MessageBaseBean({
     this.conversationId,
     this.fromDeviceId,
     this.toDeviceId,
@@ -28,7 +28,7 @@ class BaseMessageBean {
     this.isSender,
   });
 
-  BaseMessageBean.fromJson(dynamic json) {
+  MessageBaseBean.fromJson(dynamic json) {
     conversationId = json['conversation_id'];
     fromDeviceId = json['from_device_id'];
     toDeviceId = json['to_device_id'];
@@ -82,7 +82,7 @@ abstract class Message{
   }
 
   bool initBase(String? myDeviceId, String? deviceId){
-    final base = this.base ?? BaseMessageBean();
+    final base = this.base ?? MessageBaseBean();
     base.fromDeviceId ??= myDeviceId;
     base.toDeviceId ??= deviceId;
     if (myDeviceId != null && deviceId != null) {
@@ -95,7 +95,7 @@ abstract class Message{
     this.base = base;
     return true;
   }
-  BaseMessageBean? base;
+  MessageBaseBean? base;
   /// 所属分页文件名，例如 `1.json`
   String? pageName;
   Map<String, dynamic> toJson();
@@ -106,21 +106,23 @@ abstract class Message{
     if (typeCode == null) return null;
     switch (MessageType.fromCode(typeCode)) {
       case MessageType.text:
-        return TextMessageBean.fromJson(json);
+        return MessageTextBean.fromJson(json);
       case MessageType.file:
         switch (FileTransferState.fromCode(json['state']?.toString())) {
           case FileTransferState.send:
-            return SendFileBean.fromJson(json);
+            return MessageSendFileBean.fromJson(json);
           case FileTransferState.rejected:
           case FileTransferState.transferring:
-            return ReplySendFileBean.fromJson(json);
+            return MessageReplySendFileBean.fromJson(json);
           case FileTransferState.success:
           case FileTransferState.failed:
-            return AckFileBean.fromJson(json);
+            return AckFileMessageBean.fromJson(json);
           case null:
             return null;
         }
       case MessageType.rawAck:
+      case MessageType.tempPublicKey:
+      case MessageType.ciphertextOk:
       case null:
         return null;
     }

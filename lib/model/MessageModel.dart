@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
-import 'package:yf_code/bean/BaseMessageBean.dart';
-import 'package:yf_code/bean/SendFileBean.dart';
-import 'package:yf_code/bean/TextMessageBean.dart';
+import 'package:yf_code/bean/MessageBaseBean.dart';
+import 'package:yf_code/bean/MessageSendFileBean.dart';
+import 'package:yf_code/bean/MessageTextBean.dart';
 import 'package:yf_code/model/IMessage/FileMessageDisplay.dart';
 import 'package:yf_code/model/IMessage/IMessageDisplay.dart';
 import 'package:yf_code/model/IMessage/TextMessageDisplay.dart';
@@ -24,10 +24,10 @@ class MessageModel extends ChangeNotifier {
   }
 
   void _ingest(Message message) {
-    if (message is SendFileBean) {
+    if (message is MessageSendFileBean) {
       final f=FileMessageDisplay(message);
       _messageList.add(f);
-    } else if (message is TextMessageBean) {
+    } else if (message is MessageTextBean) {
       final f=TextMessageDisplay(message);
       _messageList.add(f);
     }else{

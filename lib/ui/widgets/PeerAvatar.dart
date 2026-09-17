@@ -41,6 +41,7 @@ class PeerAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final badge = (size * 0.3).clamp(12.0, 18.0);
     return SizedBox(
       width: size,
       height: size,
@@ -66,11 +67,11 @@ class PeerAvatar extends StatelessWidget {
               ),
             ),
           ),
-          if (showStatus)
+          if (showStatus && online)
             Positioned(
               right: -2,
               bottom: -2,
-              child: _StatusDot(online: online, pulse: pulse && online, borderColor: c.bg),
+              child: PresenceDot(size: badge, pulse: pulse, borderColor: c.bg),
             ),
         ],
       ),
@@ -78,18 +79,18 @@ class PeerAvatar extends StatelessWidget {
   }
 }
 
-class _StatusDot extends StatefulWidget {
-  const _StatusDot({required this.online, required this.pulse, required this.borderColor});
+class PresenceDot extends StatefulWidget {
+  const PresenceDot({super.key, this.size = 12, this.pulse = false, this.borderColor});
 
-  final bool online;
+  final double size;
   final bool pulse;
-  final Color borderColor;
+  final Color? borderColor;
 
   @override
-  State<_StatusDot> createState() => _StatusDotState();
+  State<PresenceDot> createState() => _PresenceDotState();
 }
 
-class _StatusDotState extends State<_StatusDot> with SingleTickerProviderStateMixin {
+class _PresenceDotState extends State<PresenceDot> with SingleTickerProviderStateMixin {
   AnimationController? _controller;
 
   @override
@@ -99,7 +100,7 @@ class _StatusDotState extends State<_StatusDot> with SingleTickerProviderStateMi
   }
 
   @override
-  void didUpdateWidget(covariant _StatusDot oldWidget) {
+  void didUpdateWidget(covariant PresenceDot oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.pulse && _controller == null) {
       _startPulse();
@@ -122,14 +123,14 @@ class _StatusDotState extends State<_StatusDot> with SingleTickerProviderStateMi
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final fill = widget.online ? c.online : c.textTertiary;
+    final ring = widget.borderColor == null ? 0.0 : (widget.size * 0.18).clamp(2.0, 2.6);
     final dot = Container(
-      width: 12,
-      height: 12,
+      width: widget.size,
+      height: widget.size,
       decoration: BoxDecoration(
-        color: fill,
+        color: c.online,
         shape: BoxShape.circle,
-        border: Border.all(color: widget.borderColor, width: 2.5),
+        border: ring > 0 ? Border.all(color: widget.borderColor!, width: ring) : null,
       ),
     );
     final controller = _controller;
@@ -138,17 +139,41 @@ class _StatusDotState extends State<_StatusDot> with SingleTickerProviderStateMi
       animation: controller,
       builder: (context, child) {
         final t = controller.value;
-        final spread = 7.0 * (t < 0.7 ? t / 0.7 : 1);
-        final alpha = t < 0.7 ? 0.55 * (1 - t / 0.7) : 0.0;
+        final spread = (widget.size * 0.55) * (t < 0.7 ? t / 0.7 : 1);
+        final alpha = t < 0.7 ? 0.5 * (1 - t / 0.7) : 0.0;
         return Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: const Color(0xFF7FBF6E).withValues(alpha: alpha), spreadRadius: spread)],
+            boxShadow: [BoxShadow(color: c.online.withValues(alpha: alpha), spreadRadius: spread)],
           ),
           child: child,
         );
       },
       child: dot,
+    );
+  }
+}
+
+class PresenceChip extends StatelessWidget {
+  const PresenceChip({super.key, required this.online});
+
+  final bool online;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final fg = online ? c.online : c.textTertiary;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(6, 2, 6, 2),
+      decoration: BoxDecoration(
+        color: online ? c.onlineDim : Colors.transparent,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: online ? fg.withValues(alpha: 0.5) : c.border),
+      ),
+      child: Text(
+        online ? '在线' : '离线',
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: fg, height: 1.2, letterSpacing: 0.15),
+      ),
     );
   }
 }

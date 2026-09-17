@@ -3,14 +3,17 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:yf_code/InitManager.dart';
-import 'package:yf_code/bean/AckFileBean.dart';
-import 'package:yf_code/bean/ReplySendFileBean.dart';
-import 'package:yf_code/bean/SendFileBean.dart';
+import 'package:yf_code/bean/AckFileMessageBean.dart';
+import 'package:yf_code/bean/DeviceBean.dart';
+import 'package:yf_code/bean/MessageReplySendFileBean.dart';
+import 'package:yf_code/bean/MessageSendFileBean.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
 import 'package:yf_code/channel/FileByteChannel.dart';
+import 'package:yf_code/cipher/KeyNegotiator.dart';
 import 'package:yf_code/session/FileTransferSession.dart';
 import 'package:yf_code/manager/AppFileStore.dart';
 import 'package:yf_code/manager/MessageManager.dart';
+import 'package:yf_code/model/AppSettings.dart';
 import 'package:yf_code/ui/ReceiveFileDialog.dart';
 import 'package:yf_code/utils/FileUtils.dart';
 import 'package:yf_code/utils/log.dart';
@@ -53,10 +56,12 @@ class FileTransferManager {
     return '${InitManager.deviceId ?? "dev"}-${DateTime.now().microsecondsSinceEpoch}';
   }
 
-  /// 发送方：起 TCP 监听并发送 [SendFileBean]。
-  static Future<void> offer(File file, String ip, String? deviceId) async {
+  /// 发送方：起 TCP 监听并发送 [MessageSendFileBean]。
+  static Future<void> offer(File file, DeviceBean device) async {
     final transferId = _newTransferId();
-    final tcp = FileByteChannel(ip, deviceId);
+    final ip = device.ipAddress ?? '';
+    final encrypted = AppSettings.instance.encryptOn && KeyNegotiator.isReady(ip);
+    final tcp = FileByteChannel(ip, encrypted: encrypted);
     final server = await tcp.startSendFile(
       file,
       onProgress: (current, total) {
@@ -72,19 +77,19 @@ class FileTransferManager {
     final port = server.port;
     final localPath = file.path;
 
-    final bean = SendFileBean(
+    final bean = MessageSendFileBean(
       transferId: transferId,
       mimeType: mimeType,
       name: name,
       totalSize: totalSize,
       port: port,
+      encrypted: encrypted,
     );
 
     final session = FileTransferSession(
       transferId: transferId,
       isSender: true,
-      peerIp: ip,
-      peerDeviceId: deviceId,
+      peer: device,
       state: FileTransferState.send,
       name: name,
       mimeType: mimeType,
@@ -101,13 +106,13 @@ class FileTransferManager {
       cancel(transferId);
     });
 
-    await MessageManager.sendMessage(bean, ip, deviceId);
+    await MessageManager.sendMessage(bean, device);
     MessageManager.updateFile(transferId, state: FileTransferState.send, localPath: localPath);
-    iLog("已发送文件 offer transferId=$transferId port=$port");
+    iLog("已发送文件 offer transferId=$transferId port=$port encrypted=$encrypted");
   }
 
-  /// 接收方：收到 [SendFileBean]。
-  static void onOffer(SendFileBean offer, String ip) {
+  /// 接收方：收到 [MessageSendFileBean]。
+  static void onOffer(MessageSendFileBean offer, String ip) {
     final transferId = offer.transferId;
     if (transferId == null || transferId.isEmpty) {
       iLog("忽略无效文件 offer：缺少 transfer_id");
@@ -121,8 +126,7 @@ class FileTransferManager {
     final session = FileTransferSession(
       transferId: transferId,
       isSender: false,
-      peerIp: ip,
-      peerDeviceId: offer.base?.fromDeviceId,
+      peer: DeviceBean(ipAddress: ip, deviceId: offer.base?.fromDeviceId),
       state: FileTransferState.send,
       name: offer.name,
       mimeType: offer.mimeType,
@@ -149,7 +153,7 @@ class FileTransferManager {
   }
 
   /// 发送方：收到同意/拒绝。
-  static Future<void> onReply(ReplySendFileBean reply, String ip) async {
+  static Future<void> onReply(MessageReplySendFileBean reply, String ip) async {
     final transferId = reply.transferId;
     if (transferId == null) return;
 
@@ -185,7 +189,7 @@ class FileTransferManager {
   }
 
   /// 发送方：收到接收完成 Ack。
-  static Future<void> onAck(AckFileBean ack) async {
+  static Future<void> onAck(AckFileMessageBean ack) async {
     final transferId = ack.transferId;
     if (transferId == null) return;
 
@@ -231,12 +235,8 @@ class FileTransferManager {
 
     session.state = FileTransferState.transferring;
     MessageManager.updateFile(transferId, state: FileTransferState.transferring);
-    final reply = ReplySendFileBean.buildAccept(offer);
-    await MessageManager.sendMessage(
-      reply,
-      session.peerIp,
-      session.peerDeviceId,
-    );
+    final reply = MessageReplySendFileBean.buildAccept(offer);
+    await MessageManager.sendMessage(reply, session.peer);
 
     final path = savePath ??
         await AppFileStore.generateDownloadPath(
@@ -245,7 +245,7 @@ class FileTransferManager {
         );
     session.localPath = path;
 
-    final tcp = FileByteChannel(session.peerIp, session.peerDeviceId);
+    final tcp = FileByteChannel(session.peer.ipAddress ?? '', encrypted: offer.encrypted);
     try {
       await tcp.startReceiveFile(
         port: port,
@@ -260,23 +260,15 @@ class FileTransferManager {
         },
       );
       session.state = FileTransferState.success;
-      final ack = AckFileBean.buildSuccess(offer, receiverLocalPath: path);
-      await MessageManager.sendMessage(
-        ack,
-        session.peerIp,
-        session.peerDeviceId,
-      );
+      final ack = AckFileMessageBean.buildSuccess(offer, receiverLocalPath: path);
+      await MessageManager.sendMessage(ack, session.peer);
       MessageManager.updateFile(transferId, state: FileTransferState.success, localPath: path);
       iLog("接收完成并已发送 ack transferId=$transferId path=$path");
     } catch (e) {
       iLog("接收失败 transferId=$transferId: $e");
       session.state = FileTransferState.failed;
-      final ack = AckFileBean.buildFailed(offer);
-      await MessageManager.sendMessage(
-        ack,
-        session.peerIp,
-        session.peerDeviceId,
-      );
+      final ack = AckFileMessageBean.buildFailed(offer);
+      await MessageManager.sendMessage(ack, session.peer);
       MessageManager.updateFile(transferId, state: FileTransferState.failed);
     } finally {
       _removeSession(transferId);
@@ -298,12 +290,8 @@ class FileTransferManager {
 
     session.state = FileTransferState.rejected;
     MessageManager.updateFile(transferId, state: FileTransferState.rejected);
-    final reply = ReplySendFileBean.buildRejected(offer);
-    await MessageManager.sendMessage(
-      reply,
-      session.peerIp,
-      session.peerDeviceId,
-    );
+    final reply = MessageReplySendFileBean.buildRejected(offer);
+    await MessageManager.sendMessage(reply, session.peer);
     _removeSession(transferId);
     iLog("已拒绝接收 transferId=$transferId");
   }

@@ -1,5 +1,5 @@
-import 'package:yf_code/bean/BaseMessageBean.dart';
-import 'package:yf_code/bean/SendFileBean.dart';
+import 'package:yf_code/bean/MessageBaseBean.dart';
+import 'package:yf_code/bean/MessageSendFileBean.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
 import 'package:yf_code/enum/MessageType.dart';
 import 'package:yf_code/manager/MessageStore.dart';
@@ -10,16 +10,16 @@ import 'package:yf_code/manager/MessageStore.dart';
 /// state : "success"
 /// receiver_local_path : "/storage/emulated/0/..../新建文本文件.txt"
 
-class AckFileBean extends Message {
-  AckFileBean({
+class AckFileMessageBean extends Message {
+  AckFileMessageBean({
     this.transferId,
     this.state,
     this.receiverLocalPath,
   }) : messageId = MessageStore.newMessageId(MessageType.file);
 
-  AckFileBean.fromJson(dynamic json) : messageId = json['message_id']?.toString() ?? '' {
+  AckFileMessageBean.fromJson(dynamic json) : messageId = json['message_id']?.toString() ?? '' {
     transferId = json['transfer_id'];
-    base = json['base'] != null ? BaseMessageBean.fromJson(json['base']) : null;
+    base = json['base'] != null ? MessageBaseBean.fromJson(json['base']) : null;
     pageName = json['page_name'];
     state = json['state'];
     receiverLocalPath = json['receiver_local_path'];
@@ -50,19 +50,19 @@ class AckFileBean extends Message {
     return map;
   }
 
-  static AckFileBean buildSuccess(
-    SendFileBean sendFileBean, {
+  static AckFileMessageBean buildSuccess(
+    MessageSendFileBean sendFileBean, {
     String? receiverLocalPath,
   }) {
-    return AckFileBean(
+    return AckFileMessageBean(
       transferId: sendFileBean.transferId,
       state: FileTransferState.success.code,
       receiverLocalPath: receiverLocalPath,
     );
   }
 
-  static AckFileBean buildFailed(SendFileBean sendFileBean) {
-    return AckFileBean(
+  static AckFileMessageBean buildFailed(MessageSendFileBean sendFileBean) {
+    return AckFileMessageBean(
       transferId: sendFileBean.transferId,
       state: FileTransferState.failed.code,
     );

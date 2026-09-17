@@ -16,6 +16,12 @@ add_executable(${BINARY_NAME} WIN32
   "runner.exe.manifest"
 )
 
+# rc.exe does not always notice app_icon.ico changes unless it is an explicit
+# dependency, so Release can keep the previously compiled default icon.
+set_source_files_properties(
+  "Runner.rc"
+  PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon.ico")
+
 # Apply the standard set of build settings. This can be removed for applications
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})

@@ -1,16 +1,17 @@
 
-import 'package:yf_code/bean/BaseMessageBean.dart';
-import 'package:yf_code/bean/FileTransferRecord.dart';
-import 'package:yf_code/bean/SendFileBean.dart';
+import 'package:yf_code/bean/MessageBaseBean.dart';
+import 'package:yf_code/bean/MessageSendFileBean.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
 import 'package:yf_code/model/IMessage/IMessageDisplay.dart';
+import 'package:yf_code/utils/FileUtils.dart';
 
 class FileMessageDisplay extends IMessageDisplay{
   FileMessageDisplay(this.fileMessage);
-  final SendFileBean fileMessage;
+  final MessageSendFileBean fileMessage;
 
   String? get name => fileMessage.name;
   String? get mimeType => fileMessage.mimeType;
+  bool get isImage => FileUtils.isImage(mime: mimeType, name: name);
   int? get totalSize => fileMessage.totalSize;
   String? get localPath => fileMessage.transferRecord?.localPath;
   FileTransferState? get fileState=>FileTransferState.fromCode(fileMessage.transferRecord?.state)??FileTransferState.send;

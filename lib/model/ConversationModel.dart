@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
-import 'package:yf_code/bean/BaseMessageBean.dart';
+import 'package:yf_code/bean/MessageBaseBean.dart';
 import 'package:yf_code/bean/ConversationBean.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
-import 'package:yf_code/bean/SendFileBean.dart';
-import 'package:yf_code/bean/TextMessageBean.dart';
+import 'package:yf_code/bean/MessageSendFileBean.dart';
+import 'package:yf_code/bean/MessageTextBean.dart';
 import 'package:yf_code/model/OnlineDeviceModel.dart';
 
 class ConversationModel with ChangeNotifier {
@@ -29,7 +29,7 @@ class ConversationModel with ChangeNotifier {
 
     final existing = _conversationList[deviceId];
     final timestamp = message.base?.sendTimestampUtc?.toInt();
-    final canPreview = message is TextMessageBean || message is SendFileBean;
+    final canPreview = message is MessageTextBean || message is MessageSendFileBean;
     int? lastOnline;
     for (final d in OnlineDeviceModel.instance.deviceList) {
       if (d.deviceId == deviceId) {
@@ -78,7 +78,7 @@ class ConversationModel with ChangeNotifier {
   }
 
   String _previewOf(Message message) {
-    if (message is TextMessageBean) {
+    if (message is MessageTextBean) {
       final text = message.text;
       if (text != null && text.isNotEmpty) return text;
       return '';

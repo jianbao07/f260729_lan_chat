@@ -22,6 +22,49 @@ void showAppToast(BuildContext context, String message) {
   );
 }
 
+void showInfoDetailDialog(BuildContext context, {required String title, required String value}) {
+  final c = context.colors;
+  var copied = false;
+  showDialog<void>(
+    context: context,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (ctx, setState) {
+          return AlertDialog(
+            backgroundColor: c.surface,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: c.border)),
+            title: Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: c.textPrimary)),
+            content: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.5),
+              child: SingleChildScrollView(
+                child: Text(
+                  value.split('').join('\u200B'),
+                  style: TextStyle(fontSize: 13.5, height: 1.5, color: c.textPrimary, fontFamily: kMonoFont),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: value));
+                  setState(() => copied = true);
+                },
+                style: TextButton.styleFrom(foregroundColor: c.textSecondary),
+                child: Text(copied ? '已复制' : '复制'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                style: FilledButton.styleFrom(backgroundColor: c.accent, foregroundColor: c.onAccent),
+                child: const Text('关闭'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
 String relativeTimeLabel(int? utcMs) {
   if (utcMs == null) return '';
   final last = DateTime.fromMillisecondsSinceEpoch(utcMs, isUtc: true);
@@ -115,6 +158,9 @@ class InfoRow extends StatelessWidget {
     required this.label,
     this.value,
     this.mono = false,
+    this.wrap = false,
+    this.scroll = false,
+    this.detail = false,
     this.showDivider = true,
     this.child,
   });
@@ -122,38 +168,53 @@ class InfoRow extends StatelessWidget {
   final String label;
   final String? value;
   final bool mono;
+  final bool wrap;
+  final bool scroll;
+  final bool detail;
   final bool showDivider;
   final Widget? child;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    return Container(
+    final v = value;
+    final onTap = detail && v != null && v.isNotEmpty && v != '—'
+        ? () => showInfoDetailDialog(context, title: label, value: v)
+        : null;
+    final row = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       decoration: BoxDecoration(
         border: showDivider ? Border(bottom: BorderSide(color: c.hairline)) : null,
       ),
       child: Row(
+        crossAxisAlignment: wrap ? CrossAxisAlignment.start : CrossAxisAlignment.center,
         children: [
           Text(label, style: TextStyle(fontSize: 13.5, color: c.textSecondary)),
           const SizedBox(width: 12),
           Expanded(
             child: Align(
-              alignment: Alignment.centerRight,
-              child: child ?? _CopyableValue(value: value ?? '', mono: mono),
+              alignment: wrap ? Alignment.topRight : Alignment.centerRight,
+              child: child ?? _CopyableValue(value: value ?? '', mono: mono, wrap: wrap, scroll: scroll),
             ),
           ),
         ],
       ),
     );
+    if (onTap == null) return row;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(onTap: onTap, child: row),
+    );
   }
 }
 
 class _CopyableValue extends StatefulWidget {
-  const _CopyableValue({required this.value, required this.mono});
+  const _CopyableValue({required this.value, required this.mono, this.wrap = false, this.scroll = false});
 
   final String value;
   final bool mono;
+  final bool wrap;
+  final bool scroll;
 
   @override
   State<_CopyableValue> createState() => _CopyableValueState();
@@ -173,25 +234,58 @@ class _CopyableValueState extends State<_CopyableValue> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final style = TextStyle(
+      fontSize: 13.5,
+      height: widget.wrap ? 1.4 : null,
+      color: c.textPrimary,
+      fontFamily: widget.mono ? kMonoFont : null,
+    );
+    final copyButton = GestureDetector(
+      onTap: _copy,
+      child: Icon(_copied ? Icons.check : Icons.copy_outlined, size: 14, color: _copied ? c.online : c.textTertiary),
+    );
+
+    if (widget.scroll) {
+      return Row(
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final painter = TextPainter(
+                  text: TextSpan(text: widget.value, style: style),
+                  maxLines: 1,
+                  textDirection: Directionality.of(context),
+                )..layout();
+                final text = Text(widget.value, maxLines: 1, softWrap: false, style: style);
+                if (painter.width <= constraints.maxWidth) {
+                  return Align(alignment: Alignment.centerRight, child: text);
+                }
+                return SingleChildScrollView(scrollDirection: Axis.horizontal, child: text);
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          copyButton,
+        ],
+      );
+    }
+
+    final display = widget.wrap ? widget.value.split('').join('\u200B') : widget.value;
     return Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: widget.wrap ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
         Flexible(
           child: Text(
-            widget.value,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 13.5,
-              color: c.textPrimary,
-              fontFamily: widget.mono ? kMonoFont : null,
-            ),
+            display,
+            softWrap: widget.wrap,
+            overflow: widget.wrap ? TextOverflow.visible : TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: style,
           ),
         ),
         const SizedBox(width: 8),
-        GestureDetector(
-          onTap: _copy,
-          child: Icon(_copied ? Icons.check : Icons.copy_outlined, size: 14, color: _copied ? c.online : c.textTertiary),
-        ),
+        copyButton,
       ],
     );
   }
@@ -478,15 +572,17 @@ class ProfileHero extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(color: isOnline ? c.online : c.textTertiary, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 6),
+                if (isOnline) ...[
+                  const PresenceDot(size: 10),
+                  const SizedBox(width: 6),
+                ],
                 Text(
                   isOnline ? '在线' : '离线 · 最后在线 ${lastSeen ?? '未知'}',
-                  style: TextStyle(fontSize: 12.5, color: c.textSecondary),
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: isOnline ? FontWeight.w600 : FontWeight.w400,
+                    color: isOnline ? c.online : c.textTertiary,
+                  ),
                 ),
               ],
             ),

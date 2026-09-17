@@ -6,6 +6,7 @@ import 'package:yf_code/manager/MessageStore.dart';
 import 'package:yf_code/manager/OnlineDeviceManager.dart';
 import 'package:yf_code/model/AppSettings.dart';
 import 'package:yf_code/channel/TextChannel.dart';
+import 'package:yf_code/cipher/KeyNegotiator.dart';
 
 class InitManager{
   InitManager._();
@@ -30,6 +31,7 @@ class InitManager{
     }
     OnlineDeviceManager.listenerBeat();
     TextChannel.init();
+    KeyNegotiator.init();
     await MessageStore.init();
   }
 

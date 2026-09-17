@@ -1,4 +1,5 @@
 
+import 'dart:convert';
 import 'dart:io';
 
 class FileUtils{
@@ -42,6 +43,37 @@ class FileUtils{
         return 'application/zip';
       default:
         return 'application/octet-stream';
+    }
+  }
+
+  static bool isImage({String? mime, String? name}) {
+    if (mime != null && mime.startsWith('image/')) return true;
+    if (name == null || name.isEmpty) return false;
+    return guessMimeType(name).startsWith('image/');
+  }
+
+  /// 先写临时文件再 rename，避免中途中断把目标 JSON 截成半截。
+  static Future<void> writeJsonAtomic(File file, Object data) async {
+    final tmp = File('${file.path}.tmp');
+    await tmp.writeAsString(jsonEncode(data), flush: true);
+    try {
+      await tmp.rename(file.path);
+    } on FileSystemException {
+      if (await file.exists()) {
+        await file.delete();
+      }
+      await tmp.rename(file.path);
+    }
+  }
+
+  /// 读 JSON；文件缺失、为空或格式损坏时返回 null。
+  static Future<dynamic> readJson(File file) async {
+    try {
+      final text = await file.readAsString();
+      if (text.trim().isEmpty) return null;
+      return jsonDecode(text);
+    } catch (_) {
+      return null;
     }
   }
 }

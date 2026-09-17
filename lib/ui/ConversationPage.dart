@@ -173,13 +173,22 @@ class _ConversationTile extends StatelessWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(
-                            displayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.textPrimary),
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  displayName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.textPrimary),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              PresenceChip(online: online),
+                            ],
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Text(
                           relativeTimeLabel(conversation.lastMessagesTimestampUtc),
                           style: TextStyle(fontSize: 12, color: c.textTertiary, fontFamily: kMonoFont),

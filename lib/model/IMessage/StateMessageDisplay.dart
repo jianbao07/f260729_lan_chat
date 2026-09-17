@@ -1,5 +1,5 @@
 
-import 'package:yf_code/bean/BaseMessageBean.dart';
+import 'package:yf_code/bean/MessageBaseBean.dart';
 import 'package:yf_code/model/IMessage/IMessageDisplay.dart';
 
 /***

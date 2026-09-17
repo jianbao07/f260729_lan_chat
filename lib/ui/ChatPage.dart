@@ -1,19 +1,24 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:yf_code/InitManager.dart';
-import 'package:yf_code/bean/BaseMessageBean.dart';
+import 'package:yf_code/bean/MessageBaseBean.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
-import 'package:yf_code/bean/TextMessageBean.dart';
+import 'package:yf_code/bean/MessageTextBean.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
 import 'package:yf_code/enum/MessageStateType.dart';
 import 'package:yf_code/manager/AppFileStore.dart';
 import 'package:yf_code/manager/FileTransferManager.dart';
 import 'package:yf_code/manager/MessageStore.dart';
 import 'package:yf_code/manager/MessageManager.dart';
+import 'package:yf_code/cipher/KeyNegotiator.dart';
+import 'package:yf_code/enum/CipherSessionState.dart';
 import 'package:yf_code/model/AppSettings.dart';
 import 'package:yf_code/model/IMessage/FileMessageDisplay.dart';
 import 'package:yf_code/model/IMessage/IMessageDisplay.dart';
@@ -21,6 +26,8 @@ import 'package:yf_code/model/IMessage/TextMessageDisplay.dart';
 import 'package:yf_code/model/MessageModel.dart';
 import 'package:yf_code/model/OnlineDeviceModel.dart';
 import 'package:yf_code/theme/AppColors.dart';
+import 'package:yf_code/ui/ImagePreviewPage.dart';
+import 'package:yf_code/ui/MePage.dart';
 import 'package:yf_code/ui/ProfilePage.dart';
 import 'package:yf_code/ui/widgets/AppChrome.dart';
 import 'package:yf_code/ui/widgets/PeerAvatar.dart';
@@ -47,6 +54,10 @@ class _ChatPageState extends State<ChatPage> {
   late final String _conversationId;
   late final MessageModel _messageModel;
   int _lastMessageCount = 0;
+  StreamSubscription<CipherSessionEvent>? _cipherSub;
+  CipherSessionState _cipherState = CipherSessionState.idle;
+  String? _cipherError;
+  bool _encryptOn = false;
 
   String get _peerName {
     final name = widget.device.name;
@@ -68,10 +79,42 @@ class _ChatPageState extends State<ChatPage> {
     _messageModel.addListener(_onMessagesChanged);
     AppSettings.instance.addListener(_onChromeChanged);
     OnlineDeviceModel.instance.addListener(_onChromeChanged);
+    _encryptOn = AppSettings.instance.encryptOn;
+    _cipherState = KeyNegotiator.stateOf(_peerIp);
+    _cipherError = KeyNegotiator.errorOf(_peerIp);
+    _cipherSub = KeyNegotiator.sessionEvents.listen(_onCipherSession);
+    _maybeStartCipher();
+  }
+
+  void _onCipherSession(CipherSessionEvent e) {
+    if (e.ip != _peerIp || !mounted) return;
+    setState(() {
+      _cipherState = e.state;
+      _cipherError = e.errorMessage;
+    });
+  }
+
+  void _maybeStartCipher() {
+    if (!_encryptOn || _peerIp.isEmpty) return;
+    KeyNegotiator.start(_peerIp);
   }
 
   void _onChromeChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final encryptOn = AppSettings.instance.encryptOn;
+    if (encryptOn != _encryptOn) {
+      _encryptOn = encryptOn;
+      if (encryptOn) {
+        _maybeStartCipher();
+      } else {
+        setState(() {
+          _cipherState = CipherSessionState.idle;
+          _cipherError = null;
+        });
+        return;
+      }
+    }
+    setState(() {});
   }
 
   void _onMessagesChanged() {
@@ -85,6 +128,7 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   void dispose() {
+    _cipherSub?.cancel();
     _messageModel.removeListener(_onMessagesChanged);
     AppSettings.instance.removeListener(_onChromeChanged);
     OnlineDeviceModel.instance.removeListener(_onChromeChanged);
@@ -107,18 +151,30 @@ class _ChatPageState extends State<ChatPage> {
     return true;
   }
 
+  bool _ensureCipherReadyForSend() {
+    if (!_encryptOn) return true;
+    if (KeyNegotiator.isReady(_peerIp)) return true;
+    if (_cipherState == CipherSessionState.failed) {
+      showAppToast(context, _cipherError ?? '加密通道建立失败');
+      return false;
+    }
+    showAppToast(context, '正在建立加密通道，请稍候');
+    return false;
+  }
+
   Future<void> _send() async {
     final text = _controller.text.trim();
     if (text.isEmpty || _sending) return;
     if (!_ensurePeerReady()) return;
+    if (!_ensureCipherReadyForSend()) return;
 
-    final msg = TextMessageBean(text: text);
+    final msg = MessageTextBean(text: text);
     setState(() {
       _sending = true;
       _controller.clear();
     });
 
-    await MessageManager.sendMessage(msg, _peerIp, _peerDeviceId);
+    await MessageManager.sendMessage(msg, widget.device);
 
     if (!mounted) return;
     setState(() => _sending = false);
@@ -147,7 +203,7 @@ class _ChatPageState extends State<ChatPage> {
         sourcePath: picked.path.isEmpty ? null : picked.path,
         openContent: picked.openRead,
       );
-      await MessageManager.sendFile(local, _peerIp, _peerDeviceId);
+      await MessageManager.sendFile(local, widget.device);
     } catch (e) {
       if (!mounted) return;
       showAppToast(context, '发送文件失败：$e');
@@ -185,6 +241,16 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _onFileTap(FileMessageDisplay file, {required bool mine}) async {
+    if (file.isImage) {
+      final imagePath = file.localPath;
+      if (imagePath != null && imagePath.isNotEmpty && await File(imagePath).exists()) {
+        if (!mounted) return;
+        await startPage(context, ImagePreviewPage(path: imagePath, name: file.name ?? '图片', mimeType: file.mimeType));
+        return;
+      }
+    }
+    if (!mounted) return;
+
     switch (file.fileState) {
       case FileTransferState.send:
         showAppToast(context, mine ? '等待对方接收文件' : '请先接收文件');
@@ -219,6 +285,120 @@ class _ChatPageState extends State<ChatPage> {
     final result = await OpenFilex.open(path, type: file.mimeType);
     if (!mounted) return;
     if (result.type != ResultType.done) showAppToast(context, result.message);
+  }
+
+  Future<void> _onFileLongPress(FileMessageDisplay file, {required bool mine}) async {
+    if (file.isImage) return;
+    final path = file.localPath;
+    if (path != null && path.isNotEmpty && await File(path).exists()) {
+      if (!mounted) return;
+      await _showFileActions(file, path);
+      return;
+    }
+    if (!mounted) return;
+    switch (file.fileState) {
+      case FileTransferState.send:
+        showAppToast(context, mine ? '等待对方接收文件' : '请先接收文件');
+        return;
+      case FileTransferState.transferring:
+        showAppToast(context, '文件正在传输中');
+        return;
+      case FileTransferState.rejected:
+        showAppToast(context, mine ? '对方已拒绝该文件' : '已拒绝该文件');
+        return;
+      case FileTransferState.failed:
+        showAppToast(context, '文件传输失败');
+        return;
+      case FileTransferState.success:
+      case null:
+        showAppToast(context, '本地文件不存在或已被移动');
+        return;
+    }
+  }
+
+  Future<void> _showFileActions(FileMessageDisplay file, String path) async {
+    final c = context.colors;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: c.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 4, bottom: 8),
+                  decoration: BoxDecoration(color: c.border, borderRadius: BorderRadius.circular(999)),
+                ),
+                ListTile(
+                  leading: Icon(Icons.ios_share_rounded, color: c.textPrimary),
+                  title: Text('分享', style: TextStyle(fontWeight: FontWeight.w600, color: c.textPrimary)),
+                  onTap: () => Navigator.pop(ctx, 'share'),
+                ),
+                ListTile(
+                  leading: Icon(Icons.save_alt_rounded, color: c.textPrimary),
+                  title: Text('另存为', style: TextStyle(fontWeight: FontWeight.w600, color: c.textPrimary)),
+                  onTap: () => Navigator.pop(ctx, 'save'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (!mounted || action == null) return;
+    if (action == 'share') await _shareLocalFile(path, name: file.name, mimeType: file.mimeType);
+    if (action == 'save') await _saveLocalFileAs(path, name: file.name);
+  }
+
+  Future<void> _shareLocalFile(String path, {String? name, String? mimeType}) async {
+    try {
+      final box = context.findRenderObject() as RenderBox?;
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(path, mimeType: mimeType, name: name)],
+          title: name ?? '文件',
+          sharePositionOrigin: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+        ),
+      );
+    } catch (_) {
+      if (mounted) showAppToast(context, '分享失败');
+    }
+  }
+
+  Future<void> _saveLocalFileAs(String path, {String? name}) async {
+    final suggested = (name != null && name.trim().isNotEmpty) ? name.trim() : 'file';
+    try {
+      if (Platform.isAndroid || Platform.isIOS) {
+        final saved = await FlutterFileDialog.saveFile(params: SaveFileDialogParams(sourceFilePath: path, fileName: suggested));
+        if (!mounted || saved == null) return;
+        showAppToast(context, '已保存');
+        return;
+      }
+      final location = await getSaveLocation(suggestedName: suggested);
+      if (location == null) return;
+      if (location.path == path) {
+        if (mounted) showAppToast(context, '已保存');
+        return;
+      }
+      await File(path).copy(location.path);
+      if (mounted) showAppToast(context, '已保存');
+    } catch (_) {
+      if (mounted) showAppToast(context, '保存失败');
+    }
+  }
+
+  void _openAvatarPage({required bool mine}) {
+    if (mine) {
+      startPage(context, const MePage(standalone: true));
+      return;
+    }
+    startPage(context, ProfilePage(device: widget.device));
   }
 
   void _scrollToBottom() {
@@ -287,6 +467,12 @@ class _ChatPageState extends State<ChatPage> {
               onBack: () => gotoBack(context),
               onProfile: () => startPage(context, ProfilePage(device: widget.device)),
             ),
+            if (_encryptOn)
+              _CipherBanner(
+                state: _cipherState,
+                errorMessage: _cipherError,
+                onRetry: _peerIp.isEmpty ? null : () => KeyNegotiator.start(_peerIp),
+              ),
             Expanded(
               child: messages.isEmpty
                   ? _EmptyChat(peerName: _displayName)
@@ -309,6 +495,8 @@ class _ChatPageState extends State<ChatPage> {
                           onAcceptFile: _acceptFile,
                           onRejectFile: _rejectFile,
                           onFileTap: _onFileTap,
+                          onFileLongPress: _onFileLongPress,
+                          onAvatarTap: _openAvatarPage,
                         );
                       },
                     ),
@@ -372,13 +560,105 @@ class _ChatHeader extends StatelessWidget {
                   Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.textPrimary)),
                   Text(
                     online ? '在线' : '离线 · 最后在线 $lastSeen',
-                    style: TextStyle(fontSize: 11.5, color: c.textSecondary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: online ? FontWeight.w600 : FontWeight.w400,
+                      color: online ? c.online : c.textTertiary,
+                    ),
                   ),
                 ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CipherBanner extends StatelessWidget {
+  const _CipherBanner({required this.state, this.errorMessage, this.onRetry});
+
+  final CipherSessionState state;
+  final String? errorMessage;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    late final Color bg;
+    late final Color fg;
+    late final IconData icon;
+    late final String title;
+    late final String? subtitle;
+    final showRetry =
+        (state == CipherSessionState.failed || state == CipherSessionState.idle) && onRetry != null;
+
+    switch (state) {
+      case CipherSessionState.ready:
+        bg = c.onlineDim;
+        fg = c.online;
+        icon = Icons.lock_rounded;
+        title = '端到端加密已启用';
+        subtitle = '请与对方核实公钥是否一致';
+        break;
+      case CipherSessionState.establishing:
+        bg = c.accentDim;
+        fg = c.accent;
+        icon = Icons.sync_rounded;
+        title = '正在建立加密通道…';
+        subtitle = null;
+        break;
+      case CipherSessionState.failed:
+        bg = Color.alphaBlend(c.danger.withValues(alpha: 0.12), c.surface);
+        fg = c.danger;
+        icon = Icons.lock_open_rounded;
+        title = '加密建立失败';
+        subtitle = errorMessage;
+        break;
+      case CipherSessionState.idle:
+        bg = c.surfaceAlt;
+        fg = c.textSecondary;
+        icon = Icons.lock_outline_rounded;
+        title = '等待加密连接';
+        subtitle = null;
+        break;
+    }
+
+    return Material(
+      color: bg,
+      child: InkWell(
+        onTap: showRetry ? onRetry : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Row(
+            children: [
+              if (state == CipherSessionState.establishing)
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: fg),
+                )
+              else
+                Icon(icon, size: 16, color: fg),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: fg)),
+                    if (subtitle != null && subtitle.isNotEmpty)
+                      Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: c.textSecondary)),
+                  ],
+                ),
+              ),
+              if (showRetry)
+                Text('重试', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -428,6 +708,8 @@ class _MessageBubble extends StatelessWidget {
     required this.onAcceptFile,
     required this.onRejectFile,
     required this.onFileTap,
+    required this.onFileLongPress,
+    required this.onAvatarTap,
   });
 
   final IMessageDisplay message;
@@ -440,6 +722,8 @@ class _MessageBubble extends StatelessWidget {
   final ValueChanged<String> onAcceptFile;
   final ValueChanged<String> onRejectFile;
   final void Function(FileMessageDisplay file, {required bool mine}) onFileTap;
+  final void Function(FileMessageDisplay file, {required bool mine}) onFileLongPress;
+  final void Function({required bool mine}) onAvatarTap;
 
   bool get _isMine => message.baseMessage?.base?.fromDeviceId == myDeviceId;
 
@@ -451,6 +735,15 @@ class _MessageBubble extends StatelessWidget {
     if (utc == null) return '';
     final t = DateTime.fromMillisecondsSinceEpoch(utc.toInt(), isUtc: true).toLocal();
     return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  }
+
+  String get _text => message is TextMessageDisplay ? ((message as TextMessageDisplay).textMessage.text ?? '') : '';
+
+  Future<void> _copyText(BuildContext context) async {
+    final text = _text;
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (context.mounted) showAppToast(context, '已复制');
   }
 
   @override
@@ -468,7 +761,11 @@ class _MessageBubble extends StatelessWidget {
         mainAxisAlignment: mine ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!mine) PeerAvatar(id: peerId, name: peerName, size: 38, radius: 11, showStatus: false),
+          if (!mine)
+            GestureDetector(
+              onTap: () => onAvatarTap(mine: false),
+              child: PeerAvatar(id: peerId, name: peerName, size: 38, radius: 11, showStatus: false),
+            ),
           if (!mine) const SizedBox(width: 8),
           Flexible(
             child: Column(
@@ -488,13 +785,17 @@ class _MessageBubble extends StatelessWidget {
                           mine: mine,
                           busy: fileActionBusy,
                           onTap: () => onFileTap(message as FileMessageDisplay, mine: mine),
+                          onLongPress: (message as FileMessageDisplay).isImage
+                              ? null
+                              : () => onFileLongPress(message as FileMessageDisplay, mine: mine),
                           onAccept: () => onAcceptFile((message as FileMessageDisplay).fileMessage.transferId!),
                           onReject: () => onRejectFile((message as FileMessageDisplay).fileMessage.transferId!),
                         )
                       : Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                           child: SelectableText(
-                            message is TextMessageDisplay ? ((message as TextMessageDisplay).textMessage.text ?? '') : '',
+                            _text,
+                            onTap: () => _copyText(context),
                             cursorColor: mine ? c.onAccent : c.accent,
                             style: TextStyle(fontSize: 14, height: 1.45, color: mine ? c.onAccent : c.textPrimary),
                           ),
@@ -515,7 +816,11 @@ class _MessageBubble extends StatelessWidget {
             ),
           ),
           if (mine) const SizedBox(width: 8),
-          if (mine) PeerAvatar(id: meId, name: meName, size: 38, radius: 11, showStatus: false),
+          if (mine)
+            GestureDetector(
+              onTap: () => onAvatarTap(mine: true),
+              child: PeerAvatar(id: meId, name: meName, size: 38, radius: 11, showStatus: false),
+            ),
         ],
       ),
     );
@@ -528,6 +833,7 @@ class _FileBubbleBody extends StatelessWidget {
     required this.mine,
     required this.busy,
     required this.onTap,
+    this.onLongPress,
     required this.onAccept,
     required this.onReject,
   });
@@ -536,6 +842,7 @@ class _FileBubbleBody extends StatelessWidget {
   final bool mine;
   final bool busy;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final VoidCallback onAccept;
   final VoidCallback onReject;
 
@@ -571,6 +878,13 @@ class _FileBubbleBody extends StatelessWidget {
     return Icons.insert_drive_file_outlined;
   }
 
+  bool get _canShowImage {
+    if (!file.isImage) return false;
+    final path = file.localPath;
+    if (path == null || path.isEmpty) return false;
+    return File(path).existsSync();
+  }
+
   Color _stateColor(AppColors c) {
     switch (file.fileState) {
       case FileTransferState.send:
@@ -589,6 +903,50 @@ class _FileBubbleBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (_canShowImage) return _imageBody(context);
+    return _fileBody(context);
+  }
+
+  Widget _imageBody(BuildContext context) {
+    final overlay = file.fileState != null && file.fileState != FileTransferState.success;
+    final transferring = file.fileState == FileTransferState.transferring;
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Image.file(
+            File(file.localPath!),
+            fit: BoxFit.cover,
+            width: MediaQuery.sizeOf(context).width * 0.62,
+            height: 220,
+            filterQuality: FilterQuality.medium,
+            errorBuilder: (context, error, stackTrace) => _fileBody(context),
+          ),
+          if (overlay)
+            Positioned.fill(
+              child: ColoredBox(
+                color: const Color(0x66000000),
+                child: Center(
+                  child: transferring
+                      ? SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white, value: file.progress),
+                        )
+                      : Text(
+                          stateLabel(file.fileState!, mine: mine),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                        ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _fileBody(BuildContext context) {
     final c = context.colors;
     final fg = mine ? c.onAccent : c.textPrimary;
     final sub = mine ? c.onAccentMuted : c.textTertiary;
@@ -607,6 +965,7 @@ class _FileBubbleBody extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
+            onLongPress: onLongPress,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
               child: Row(

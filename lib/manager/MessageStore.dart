@@ -1,15 +1,16 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
 import 'package:path_provider/path_provider.dart';
-import 'package:yf_code/bean/BaseMessageBean.dart';
+import 'package:yf_code/bean/MessageBaseBean.dart';
 import 'package:yf_code/bean/ConversationIndex.dart';
-import 'package:yf_code/bean/SendFileBean.dart';
-import 'package:yf_code/bean/TextMessageBean.dart';
+import 'package:yf_code/bean/MessageSendFileBean.dart';
+import 'package:yf_code/bean/MessageTextBean.dart';
 import 'package:yf_code/enum/MessageType.dart';
 import 'package:yf_code/model/ConversationModel.dart';
 import 'package:yf_code/model/MessageModel.dart';
+import 'package:yf_code/utils/FileUtils.dart';
+import 'package:yf_code/utils/log.dart';
 
 class MessageStore {
   MessageStore._();
@@ -17,6 +18,7 @@ class MessageStore {
   static final Map<String, ConversationIndex> conversationIndexMap = {};//会话id->会话index.json
   static final Map<String, List<Message>> historyMessages = {};//会话id->消息
   static final Map<String, MessageModel> conversationMessageModels = {};
+  static final Map<String, Future<void>> _writeQueues = {};
   static final Random _random = Random.secure();
   static late String messageRecordDir;
 
@@ -37,33 +39,10 @@ class MessageStore {
 
     await for (final entity in root.list()) {
       if (entity is! Directory) continue;
-      final conversationId = entity.path.split(Platform.pathSeparator).last;
-      if (conversationId.isEmpty) continue;
-
-      final indexFile = File('${entity.path}${Platform.pathSeparator}index.json');
-      if (!await indexFile.exists()) continue;
-
-      final json = jsonDecode(await indexFile.readAsString());
-      final index = ConversationIndex.fromJson(json);
-      index.currentDir = entity.path;
-      conversationIndexMap[conversationId] = index;
-
-      final pages = index.pages ?? [];
-      if (pages.isEmpty) continue;
-      final pageName = pages.last.name;
-      if (pageName == null) continue;
-
-      final pageFile = File('${entity.path}${Platform.pathSeparator}$pageName');
-      if (!await pageFile.exists()) continue;
-
-      final records = jsonDecode(await pageFile.readAsString()) as List<dynamic>;
-      final messages = historyMessages.putIfAbsent(conversationId, () => []);
-      for (final record in records) {
-        final message = Message.fromJson(record);
-        if (message == null) continue;
-        message.pageName ??= pageName;
-        if (messages.any((m) => m.messageId == message.messageId)) continue;
-        messages.add(message);
+      try {
+        await _loadConversationDir(entity);
+      } catch (e) {
+        iLog('加载会话失败 path=${entity.path} err=$e');
       }
     }
     _syncConversations();
@@ -73,7 +52,7 @@ class MessageStore {
     return '${type.code}-${_generateUuid()}';
   }
 
-  static void addMessage(Message message) async {
+  static void addMessage(Message message) {
     if (_isExists(message)) return;
     final conversationId = message.base?.conversationId;
     if (conversationId == null) {
@@ -82,7 +61,10 @@ class MessageStore {
     historyMessages.putIfAbsent(conversationId, () => []).add(message);
     _getConversationModel(message)?.addMessage(message);
     ConversationModel.instance.onConversation(message);
+    _enqueueWrite(conversationId, () => _persistNewMessage(message, conversationId));
+  }
 
+  static Future<void> _persistNewMessage(Message message, String conversationId) async {
     final index = await _getConversationIndex(conversationId);
     final pages = index.pages ??= [];
     final Pages page;
@@ -98,23 +80,28 @@ class MessageStore {
   static Future<void> _addMessageToPage(Message message, ConversationIndex index, Pages page) async {
     final currentDir = index.currentDir;
     final pageName = page.name;
-    if (currentDir == null || pageName == null) return;
+    final conversationId = index.conversationId ?? message.base?.conversationId;
+    if (currentDir == null || pageName == null || conversationId == null) return;
     message.pageName = pageName;
 
     final pageFile = File('$currentDir${Platform.pathSeparator}$pageName');
+    final decoded = await FileUtils.readJson(pageFile);
     final List<dynamic> records;
-    if (await pageFile.exists()) {
-      records = jsonDecode(await pageFile.readAsString()) as List<dynamic>;
+    if (decoded is List) {
+      records = decoded;
+      records.add(message.toJson());
+    } else if (await pageFile.exists()) {
+      iLog('分页JSON损坏，从内存重建 path=${pageFile.path}');
+      records = _pageRecordsFromMemory(conversationId, pageName);
     } else {
-      records = [];
+      records = [message.toJson()];
     }
-    records.add(message.toJson());
-    await pageFile.writeAsString(jsonEncode(records));
+    await FileUtils.writeJsonAtomic(pageFile, records);
 
-    page.count = (page.count ?? 0) + 1;
-    index.totalMessages = (index.totalMessages ?? 0) + 1;
+    page.count = records.length;
     index.totalPages = index.pages?.length ?? 0;
-    await File('$currentDir${Platform.pathSeparator}index.json').writeAsString(jsonEncode(index.toJson()));
+    index.totalMessages = (index.pages ?? []).fold<int>(0, (sum, p) => sum + (p.count ?? 0));
+    await FileUtils.writeJsonAtomic(File('$currentDir${Platform.pathSeparator}index.json'), index.toJson());
   }
 
   static Future<List<Message>> getMessage(String conversationId) async {
@@ -145,9 +132,13 @@ class MessageStore {
     final pageName = pages[loadIndex].name;
     if (pageName == null) return [];
     final pageFile = File('$currentDir${Platform.pathSeparator}$pageName');
-    if (!await pageFile.exists()) return [];
-
-    final records = jsonDecode(await pageFile.readAsString()) as List<dynamic>;
+    final records = await FileUtils.readJson(pageFile);
+    if (records is! List) {
+      if (await pageFile.exists()) {
+        iLog('分页JSON损坏，跳过加载 path=${pageFile.path}');
+      }
+      return [];
+    }
     final loaded = <Message>[];
     for (final record in records) {
       final message = Message.fromJson(record);
@@ -160,7 +151,7 @@ class MessageStore {
     return loaded;
   }
 
-  static void onChangeMessage(Message message) async {
+  static void onChangeMessage(Message message) {
     final conversationId = message.base?.conversationId;
     if (conversationId == null) return;
 
@@ -170,7 +161,10 @@ class MessageStore {
       if (i >= 0) messages[i] = message;
     }
     conversationMessageModels[conversationId]?.onChangeMessage(message);
+    _enqueueWrite(conversationId, () => _persistChangedMessage(message, conversationId));
+  }
 
+  static Future<void> _persistChangedMessage(Message message, String conversationId) async {
     final pageName = message.pageName;
     if (pageName == null) return;
 
@@ -179,15 +173,19 @@ class MessageStore {
     if (currentDir == null) return;
 
     final pageFile = File('$currentDir${Platform.pathSeparator}$pageName');
+    final decoded = await FileUtils.readJson(pageFile);
+    if (decoded is List) {
+      final recordIndex = decoded.indexWhere((item) {
+        return item is Map && item['message_id']?.toString() == message.messageId;
+      });
+      if (recordIndex < 0) return;
+      decoded[recordIndex] = message.toJson();
+      await FileUtils.writeJsonAtomic(pageFile, decoded);
+      return;
+    }
     if (!await pageFile.exists()) return;
-
-    final records = jsonDecode(await pageFile.readAsString()) as List<dynamic>;
-    final recordIndex = records.indexWhere((item) {
-      return item is Map && item['message_id']?.toString() == message.messageId;
-    });
-    if (recordIndex < 0) return;
-    records[recordIndex] = message.toJson();
-    await pageFile.writeAsString(jsonEncode(records));
+    iLog('分页JSON损坏，从内存重建 path=${pageFile.path}');
+    await FileUtils.writeJsonAtomic(pageFile, _pageRecordsFromMemory(conversationId, pageName));
   }
 
   static Future<ConversationIndex> _getConversationIndex(String conversationId) async {
@@ -208,11 +206,17 @@ class MessageStore {
         totalPages: 0,
         pages: [],
       );
-      await indexFile.writeAsString(jsonEncode(index.toJson()));
+      await FileUtils.writeJsonAtomic(indexFile, index.toJson());
     } else {
-      final json = jsonDecode(await indexFile.readAsString());
-      index = ConversationIndex.fromJson(json);
-      index.currentDir = dir.path;
+      final json = await FileUtils.readJson(indexFile);
+      if (json != null) {
+        index = ConversationIndex.fromJson(json);
+        index.currentDir = dir.path;
+      } else {
+        iLog('会话索引损坏，尝试从分页文件恢复 conversationId=$conversationId');
+        index = await _recoverIndex(conversationId, dir);
+        await FileUtils.writeJsonAtomic(indexFile, index.toJson());
+      }
     }
     conversationIndexMap[conversationId] = index;
     return index;
@@ -247,7 +251,7 @@ class MessageStore {
       Message? last;
       for (var i = messages.length - 1; i >= 0; i--) {
         final m = messages[i];
-        if (m is TextMessageBean || m is SendFileBean) {
+        if (m is MessageTextBean || m is MessageSendFileBean) {
           last = m;
           break;
         }
@@ -255,6 +259,107 @@ class MessageStore {
       last ??= messages.last;
       ConversationModel.instance.onConversation(last);
     }
+  }
+
+  static Future<void> _loadConversationDir(Directory dir) async {
+    final conversationId = dir.path.split(Platform.pathSeparator).last;
+    if (conversationId.isEmpty) return;
+
+    final indexFile = File('${dir.path}${Platform.pathSeparator}index.json');
+    ConversationIndex index;
+    final json = await FileUtils.readJson(indexFile);
+    if (json != null) {
+      index = ConversationIndex.fromJson(json);
+    } else if (await indexFile.exists()) {
+      iLog('会话索引损坏，尝试从分页文件恢复 conversationId=$conversationId');
+      index = await _recoverIndex(conversationId, dir);
+      await FileUtils.writeJsonAtomic(indexFile, index.toJson());
+    } else {
+      return;
+    }
+    index.currentDir = dir.path;
+    conversationIndexMap[conversationId] = index;
+
+    final pages = index.pages ?? [];
+    if (pages.isEmpty) return;
+    final pageName = pages.last.name;
+    if (pageName == null) return;
+
+    final pageFile = File('${dir.path}${Platform.pathSeparator}$pageName');
+    final records = await FileUtils.readJson(pageFile);
+    if (records is! List) {
+      if (await pageFile.exists()) {
+        iLog('分页JSON损坏，跳过加载 path=${pageFile.path}');
+      }
+      return;
+    }
+    final messages = historyMessages.putIfAbsent(conversationId, () => []);
+    for (final record in records) {
+      final message = Message.fromJson(record);
+      if (message == null) continue;
+      message.pageName ??= pageName;
+      if (messages.any((m) => m.messageId == message.messageId)) continue;
+      messages.add(message);
+    }
+  }
+
+  static Future<void> _enqueueWrite(String conversationId, Future<void> Function() action) {
+    final previous = _writeQueues[conversationId] ?? Future<void>.value();
+    late final Future<void> current;
+    current = previous.catchError((_) {}).then((_) async {
+      try {
+        await action();
+      } catch (e) {
+        iLog('消息落盘失败 conversationId=$conversationId err=$e');
+      }
+    }).whenComplete(() {
+      if (identical(_writeQueues[conversationId], current)) {
+        _writeQueues.remove(conversationId);
+      }
+    });
+    _writeQueues[conversationId] = current;
+    return current;
+  }
+
+  static Future<ConversationIndex> _recoverIndex(String conversationId, Directory dir) async {
+    final pageFiles = <File>[];
+    await for (final entity in dir.list()) {
+      if (entity is! File) continue;
+      final name = FileUtils.fileNameOf(entity);
+      if (name == 'index.json' || !name.endsWith('.json') || name.endsWith('.tmp')) continue;
+      pageFiles.add(entity);
+    }
+    pageFiles.sort((a, b) => _pageOrder(FileUtils.fileNameOf(a)).compareTo(_pageOrder(FileUtils.fileNameOf(b))));
+    final pages = <Pages>[];
+    var total = 0;
+    for (final file in pageFiles) {
+      final records = await FileUtils.readJson(file);
+      final count = records is List ? records.length : 0;
+      if (records is! List) {
+        iLog('分页JSON损坏，计数按0处理 path=${file.path}');
+      }
+      pages.add(Pages(name: FileUtils.fileNameOf(file), count: count));
+      total += count;
+    }
+    return ConversationIndex(
+      conversationId: conversationId,
+      currentDir: dir.path,
+      totalMessages: total,
+      totalPages: pages.length,
+      pages: pages,
+    );
+  }
+
+  static List<dynamic> _pageRecordsFromMemory(String conversationId, String pageName) {
+    final messages = historyMessages[conversationId];
+    if (messages == null) return [];
+    return [for (final m in messages) if (m.pageName == pageName) m.toJson()];
+  }
+
+  static int _pageOrder(String name) {
+    final dot = name.lastIndexOf('.');
+    final raw = dot < 0 ? name : name.substring(0, dot);
+    return int.tryParse(raw) ?? 1 << 30;
   }
 
   /// 协议历史中是否已有该消息。

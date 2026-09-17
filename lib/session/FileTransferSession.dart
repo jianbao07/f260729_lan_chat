@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:yf_code/bean/SendFileBean.dart';
+import 'package:yf_code/bean/DeviceBean.dart';
+import 'package:yf_code/bean/MessageSendFileBean.dart';
 import 'package:yf_code/enum/FileTransferState.dart';
 
 /// 一次文件传输的运行时会话（按 [transferId] 索引）。
@@ -9,8 +10,7 @@ class FileTransferSession {
   FileTransferSession({
     required this.transferId,
     required this.isSender,
-    required this.peerIp,
-    this.peerDeviceId,
+    required this.peer,
     this.state = FileTransferState.send,
     this.name,
     this.mimeType,
@@ -25,8 +25,7 @@ class FileTransferSession {
   final String transferId;
   final bool isSender;
   FileTransferState state;
-  String peerIp;
-  String? peerDeviceId;
+  DeviceBean peer;
 
   String? name;
   String? mimeType;
@@ -36,7 +35,7 @@ class FileTransferSession {
   String? localPath;
 
   /// 原始 offer，接收方用于构造 Reply / Ack。
-  SendFileBean? offerMessage;
+  MessageSendFileBean? offerMessage;
 
   /// 发送方 TCP 监听。
   ServerSocket? server;

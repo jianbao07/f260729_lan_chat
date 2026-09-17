@@ -1,4 +1,4 @@
-import 'package:yf_code/bean/BaseMessageBean.dart';
+import 'package:yf_code/bean/MessageBaseBean.dart';
 import 'package:yf_code/enum/MessageType.dart';
 import 'package:yf_code/manager/MessageStore.dart';
 
@@ -6,11 +6,11 @@ import 'package:yf_code/manager/MessageStore.dart';
 /// base : {"conversation_id":"xxx","from_device_id":"xxx","to_device_id":"yyy","send_timestamp_utc":1785173158277,"success_timestamp_utc":1785173158277,"fail_timestamp_utc":1785173158277,"state":"sending"}
 /// text : "你好你好"
 
-class TextMessageBean extends Message {
-  TextMessageBean({this.text}) : messageId = MessageStore.newMessageId(MessageType.text);
+class MessageTextBean extends Message {
+  MessageTextBean({this.text}) : messageId = MessageStore.newMessageId(MessageType.text);
 
-  TextMessageBean.fromJson(dynamic json) : messageId = json['message_id']?.toString() ?? '' {
-    base = json['base'] != null ? BaseMessageBean.fromJson(json['base']) : null;
+  MessageTextBean.fromJson(dynamic json) : messageId = json['message_id']?.toString() ?? '' {
+    base = json['base'] != null ? MessageBaseBean.fromJson(json['base']) : null;
     pageName = json['page_name'];
     text = json['text'];
   }

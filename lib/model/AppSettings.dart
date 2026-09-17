@@ -13,6 +13,7 @@ class AppSettings extends ChangeNotifier {
   String nickname = '';
   bool notifOn = true;
   bool discoverable = true;
+  bool encryptOn = true;
   Map<String, String> remarks = {};
 
   ThemeMode get themeMode {
@@ -59,6 +60,7 @@ class AppSettings extends ChangeNotifier {
       nickname = (json['nickname'] as String?) ?? '';
       notifOn = json['notifOn'] != false;
       discoverable = json['discoverable'] != false;
+      encryptOn = json['encryptOn'] != false;
       final raw = json['remarks'];
       if (raw is Map) {
         remarks = raw.map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''));
@@ -93,6 +95,12 @@ class AppSettings extends ChangeNotifier {
     await _save();
   }
 
+  Future<void> setEncryptOn(bool value) async {
+    encryptOn = value;
+    notifyListeners();
+    await _save();
+  }
+
   Future<void> setRemark(String deviceId, String value) async {
     final trimmed = value.trim();
     if (trimmed.isEmpty) {
@@ -112,6 +120,7 @@ class AppSettings extends ChangeNotifier {
         'nickname': nickname,
         'notifOn': notifOn,
         'discoverable': discoverable,
+        'encryptOn': encryptOn,
         'remarks': remarks,
       }));
     } catch (_) {

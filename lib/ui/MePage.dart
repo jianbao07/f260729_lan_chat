@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:yf_code/InitManager.dart';
+import 'package:yf_code/cipher/Ed25519Key.dart';
 import 'package:yf_code/manager/OnlineDeviceManager.dart';
 import 'package:yf_code/model/AppSettings.dart';
 import 'package:yf_code/theme/AppColors.dart';
@@ -8,7 +9,9 @@ import 'package:yf_code/utils/NetworkUtils.dart';
 import 'package:yf_code/utils/page.dart';
 
 class MePage extends StatefulWidget {
-  const MePage({super.key});
+  const MePage({super.key, this.standalone = false});
+
+  final bool standalone;
 
   @override
   State<MePage> createState() => _MePageState();
@@ -16,6 +19,7 @@ class MePage extends StatefulWidget {
 
 class _MePageState extends State<MePage> {
   String? _ip;
+  String? _publicKey;
 
   String get _deviceId => InitManager.deviceId ?? '—';
   String get _deviceName => InitManager.rawDeviceName ?? InitManager.deviceName ?? '本机';
@@ -25,6 +29,7 @@ class _MePageState extends State<MePage> {
     super.initState();
     AppSettings.instance.addListener(_onChanged);
     _loadIp();
+    _loadPublicKey();
   }
 
   @override
@@ -42,6 +47,11 @@ class _MePageState extends State<MePage> {
     if (mounted) setState(() => _ip = ip);
   }
 
+  Future<void> _loadPublicKey() async {
+    final publicKey = (await Ed25519Key.getLongTermKey()).publicKeyHex;
+    if (mounted) setState(() => _publicKey = publicKey);
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = AppSettings.instance;
@@ -49,7 +59,7 @@ class _MePageState extends State<MePage> {
     final displayName = nickname.isNotEmpty ? nickname : _deviceName;
     final c = context.colors;
 
-    return ListView(
+    final content = ListView(
       children: [
         ProfileHero(
           id: _deviceId,
@@ -72,7 +82,8 @@ class _MePageState extends State<MePage> {
               },
             ),
             InfoRow(label: 'IP 地址', value: _ip ?? '—', mono: true),
-            InfoRow(label: '设备 ID', value: _deviceId, mono: true, showDivider: false),
+            InfoRow(label: '设备 ID', value: _deviceId, mono: true, detail: true),
+            InfoRow(label: '公钥', value: _publicKey ?? '—', mono: true, detail: true, showDivider: false),
           ],
         ),
         const SectionLabel(text: '通用设置'),
@@ -95,7 +106,6 @@ class _MePageState extends State<MePage> {
             ),
             InfoRow(
               label: '允许被局域网发现',
-              showDivider: false,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -115,6 +125,18 @@ class _MePageState extends State<MePage> {
                 ],
               ),
             ),
+            InfoRow(
+              label: '加密传输',
+              showDivider: false,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.lock_outline_rounded, size: 14, color: c.textTertiary),
+                  const SizedBox(width: 8),
+                  AppToggle(on: settings.encryptOn, onChanged: settings.setEncryptOn),
+                ],
+              ),
+            ),
           ],
         ),
         const SectionLabel(text: '关于'),
@@ -123,10 +145,42 @@ class _MePageState extends State<MePage> {
             InfoRow(label: '版本号', value: InitManager.version, mono: true),
             _ActionRow(label: '隐私政策', onTap: () => gotoProtocolText(ProtocolEnum.pp, context)),
             _ActionRow(label: '用户协议', onTap: () => gotoProtocolText(ProtocolEnum.ua, context)),
-            _ActionRow(label: '帮助与反馈', onTap: () => showAppToast(context, '帮助与反馈'), showDivider: false),
+            _ActionRow(
+              label: '帮助与反馈',
+              onTap: () => gotoH5(
+                'https://docs.google.com/forms/d/e/1FAIpQLScAC2DcIqJI_Fg1WDSeg_XsjvFwPquD6vJK-bqIhZBfvfzXEw/viewform?usp=publish-editor',
+                context: context,
+              ),
+              showDivider: false,
+            ),
           ],
         ),
       ],
+    );
+
+    if (!widget.standalone) return content;
+
+    return Scaffold(
+      backgroundColor: c.bg,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => gotoBack(context),
+                    icon: Icon(Icons.arrow_back, size: 19, color: c.textPrimary),
+                  ),
+                  Text('我的', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                ],
+              ),
+            ),
+            Expanded(child: content),
+          ],
+        ),
+      ),
     );
   }
 }

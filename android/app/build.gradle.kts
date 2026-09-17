@@ -32,8 +32,8 @@ android {
         applicationId = "com.ljb.lanchat"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = 2
-        versionName = "1.0"
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
         }

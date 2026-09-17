@@ -11,10 +11,10 @@ class AppFileStore {
 
   static Directory? _root;
 
-  /// 接收文件的本地保存路径。同一 [transferId] 重复调用返回同一路径，便于续传。
+  /// 接收文件的本地保存路径。按接收日期（yyyy-MM-dd）分目录。
   static Future<String> generateDownloadPath({required String transferId, String? name}) async {
     final dir = await _createDir(
-      '$_downloadsDir${Platform.pathSeparator}${_safeName(transferId, 'transfer')}',
+      '$_downloadsDir${Platform.pathSeparator}${_todayDirName()}',
     );
     final fileName = _safeName(name, transferId);
     return '${dir.path}${Platform.pathSeparator}$fileName';
@@ -82,6 +82,14 @@ class AppFileStore {
       await dir.create(recursive: true);
     }
     return dir;
+  }
+
+  static String _todayDirName() {
+    final now = DateTime.now();
+    final y = now.year.toString().padLeft(4, '0');
+    final m = now.month.toString().padLeft(2, '0');
+    final d = now.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
   }
 
   static String _safeName(String? name, String fallback) {

@@ -46,13 +46,18 @@ class _ProfilePageState extends State<ProfilePage> {
     return widget.device.deviceId ?? '未知设备';
   }
 
+  String get _publicKey {
+    final key = widget.device.publicKey;
+    if (key == null || key.isEmpty) return '—';
+    return key;
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final id = widget.device.deviceId ?? '';
     final remark = AppSettings.instance.remarkOf(id);
     final displayName = remark.isNotEmpty ? remark : _peerName;
-    final type = inferDeviceType(_peerName);
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -95,19 +100,8 @@ class _ProfilePageState extends State<ProfilePage> {
                         },
                       ),
                       InfoRow(label: 'IP 地址', value: widget.device.ipAddress ?? '—', mono: true),
-                      InfoRow(label: '设备 ID', value: id.isEmpty ? '—' : id, mono: true),
-                      InfoRow(
-                        label: '设备类型',
-                        showDivider: false,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(type.icon, size: 14, color: c.textSecondary),
-                            const SizedBox(width: 6),
-                            Text(type.label, style: TextStyle(fontSize: 13.5, color: c.textPrimary)),
-                          ],
-                        ),
-                      ),
+                      InfoRow(label: '设备 ID', value: id.isEmpty ? '—' : id, mono: true, detail: true),
+                      InfoRow(label: '公钥', value: _publicKey, mono: true, detail: true, showDivider: false),
                     ],
                   ),
                 ],
@@ -136,24 +130,4 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
-}
-
-class DeviceTypeInfo {
-  const DeviceTypeInfo(this.label, this.icon);
-  final String label;
-  final IconData icon;
-}
-
-DeviceTypeInfo inferDeviceType(String name) {
-  final n = name.toLowerCase();
-  if (n.contains('打印') || n.contains('printer')) return const DeviceTypeInfo('打印机', Icons.print_outlined);
-  if (n.contains('服务器') || n.contains('server')) return const DeviceTypeInfo('服务器', Icons.dns_outlined);
-  if (n.contains('phone') || n.contains('iphone') || n.contains('android') || n.contains('手机')) {
-    return const DeviceTypeInfo('手机', Icons.smartphone_outlined);
-  }
-  if (n.contains('tv') || n.contains('monitor') || n.contains('大屏') || n.contains('显示')) {
-    return const DeviceTypeInfo('显示屏', Icons.tv_outlined);
-  }
-  if (n.contains('desktop') || n.contains('台式')) return const DeviceTypeInfo('台式电脑', Icons.desktop_windows_outlined);
-  return const DeviceTypeInfo('笔记本电脑', Icons.laptop_outlined);
 }

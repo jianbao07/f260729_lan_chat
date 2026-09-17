@@ -1,14 +1,15 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:yf_code/cipher/KeyNegotiator.dart';
 import 'package:yf_code/utils/log.dart';
 
 
 class FileByteChannel {
-  FileByteChannel(this.ip, this.deviceId);
+  FileByteChannel(this.ip, {this.encrypted = false});
 
   final String ip;
-  final String? deviceId;
+  final bool encrypted;
 
   Future<ServerSocket> startSendFile(File file, {void Function()? waitConnection, void Function(int current, int total)? onProgress, void Function(String errorMsg)? onSendFailed, void Function()? onSendSuccess}) async {
     final server = await ServerSocket.bind(InternetAddress.anyIPv4, 0);
@@ -31,15 +32,23 @@ class FileByteChannel {
 
         final offset = ByteData.sublistView(headerBuf).getUint32(0);
         final total = await file.length();
-        iLog("对方已下载 offset=$offset total=$total path=${file.path}");
+        iLog("对方已下载 offset=$offset total=$total path=${file.path} encrypted=$encrypted");
         var current = offset;
         onProgress?.call(current, total);
         if (offset < total) {
-          await socket.addStream(file.openRead(offset).map((chunk) {
+          Stream<List<int>> source = file.openRead(offset).map((chunk) {
             current += chunk.length;
             onProgress?.call(current, total);
             return chunk;
-          }));
+          });
+          if (encrypted) {
+            final aes = KeyNegotiator.cipherOf(ip);
+            if (aes == null) {
+              throw StateError('加密通道未就绪 ip=$ip');
+            }
+            source = aes.encryptStream(source);
+          }
+          await socket.addStream(source);
         }
         await socket.flush();
         await socket.close();
@@ -66,7 +75,7 @@ class FileByteChannel {
     }
 
     final receivedSize = await file.length();
-    iLog("开始接收文件 name=$name received=$receivedSize total=$totalSize");
+    iLog("开始接收文件 name=$name received=$receivedSize total=$totalSize encrypted=$encrypted");
     onProgress?.call(receivedSize, totalSize);
 
     final socket = await Socket.connect(
@@ -81,11 +90,19 @@ class FileByteChannel {
     final raf = await file.open(mode: FileMode.append);
     var written = receivedSize;
     try {
-      await for (final data in socket) {
+      Stream<List<int>> incoming = socket;
+      if (encrypted && (totalSize <= 0 || written < totalSize)) {
+        final aes = KeyNegotiator.cipherOf(ip);
+        if (aes == null) {
+          throw StateError('加密通道未就绪 ip=$ip');
+        }
+        incoming = aes.decryptStream(socket);
+      }
+      await for (final data in incoming) {
         await raf.writeFrom(data);
         written += data.length;
         onProgress?.call(written, totalSize);
-        if (totalSize > 0 && written >= totalSize) {
+        if (!encrypted && totalSize > 0 && written >= totalSize) {
           break;
         }
       }

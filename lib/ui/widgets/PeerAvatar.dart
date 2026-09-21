@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yf_code/l10n/l10n.dart';
 import 'package:yf_code/theme/AppColors.dart';
 
 class PeerAvatar extends StatelessWidget {
@@ -171,7 +172,7 @@ class PresenceChip extends StatelessWidget {
         border: Border.all(color: online ? fg.withValues(alpha: 0.5) : c.border),
       ),
       child: Text(
-        online ? '在线' : '离线',
+        online ? context.l10n.online : context.l10n.offline,
         style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: fg, height: 1.2, letterSpacing: 0.15),
       ),
     );

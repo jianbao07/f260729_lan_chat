@@ -19,6 +19,7 @@ import 'package:yf_code/manager/MessageStore.dart';
 import 'package:yf_code/manager/MessageManager.dart';
 import 'package:yf_code/cipher/KeyNegotiator.dart';
 import 'package:yf_code/enum/CipherSessionState.dart';
+import 'package:yf_code/l10n/l10n.dart';
 import 'package:yf_code/model/AppSettings.dart';
 import 'package:yf_code/model/IMessage/FileMessageDisplay.dart';
 import 'package:yf_code/model/IMessage/IMessageDisplay.dart';
@@ -62,7 +63,7 @@ class _ChatPageState extends State<ChatPage> {
   String get _peerName {
     final name = widget.device.name;
     if (name != null && name.isNotEmpty) return name;
-    return '未知设备';
+    return context.l10n.unknownDevice;
   }
 
   String get _displayName => AppSettings.instance.displayNameOf(widget.device.deviceId, _peerName);
@@ -141,11 +142,11 @@ class _ChatPageState extends State<ChatPage> {
 
   bool _ensurePeerReady() {
     if (_peerIp.isEmpty) {
-      showAppToast(context, '对方地址无效，无法发送');
+      showAppToast(context, context.l10n.peerAddressInvalid);
       return false;
     }
     if (_peerDeviceId == null || InitManager.deviceId == null) {
-      showAppToast(context, '设备信息未就绪，无法发送');
+      showAppToast(context, context.l10n.deviceNotReady);
       return false;
     }
     return true;
@@ -155,10 +156,10 @@ class _ChatPageState extends State<ChatPage> {
     if (!_encryptOn) return true;
     if (KeyNegotiator.isReady(_peerIp)) return true;
     if (_cipherState == CipherSessionState.failed) {
-      showAppToast(context, _cipherError ?? '加密通道建立失败');
+      showAppToast(context, localizeError(context.l10n, _cipherError));
       return false;
     }
-    showAppToast(context, '正在建立加密通道，请稍候');
+    showAppToast(context, context.l10n.cipherEstablishingWait);
     return false;
   }
 
@@ -193,7 +194,7 @@ class _ChatPageState extends State<ChatPage> {
           : (picked.path.isNotEmpty ? File(picked.path).uri.pathSegments.last : '');
       if (name.isEmpty) {
         if (!mounted) return;
-        showAppToast(context, '无法获取文件名');
+        showAppToast(context, context.l10n.cannotGetFileName);
         return;
       }
 
@@ -206,7 +207,7 @@ class _ChatPageState extends State<ChatPage> {
       await MessageManager.sendFile(local, widget.device);
     } catch (e) {
       if (!mounted) return;
-      showAppToast(context, '发送文件失败：$e');
+      showAppToast(context, context.l10n.sendFileFailed('$e'));
     } finally {
       if (mounted) {
         setState(() {
@@ -224,7 +225,7 @@ class _ChatPageState extends State<ChatPage> {
       await FileTransferManager.accept(transferId);
     } catch (e) {
       if (!mounted) return;
-      showAppToast(context, '接收失败：$e');
+      showAppToast(context, context.l10n.receiveFailed('$e'));
     } finally {
       if (mounted) setState(() => _fileActionBusy.remove(transferId));
     }
@@ -245,7 +246,7 @@ class _ChatPageState extends State<ChatPage> {
       final imagePath = file.localPath;
       if (imagePath != null && imagePath.isNotEmpty && await File(imagePath).exists()) {
         if (!mounted) return;
-        await startPage(context, ImagePreviewPage(path: imagePath, name: file.name ?? '图片', mimeType: file.mimeType));
+        await startPage(context, ImagePreviewPage(path: imagePath, name: file.name ?? context.l10n.image, mimeType: file.mimeType));
         return;
       }
     }
@@ -253,16 +254,16 @@ class _ChatPageState extends State<ChatPage> {
 
     switch (file.fileState) {
       case FileTransferState.send:
-        showAppToast(context, mine ? '等待对方接收文件' : '请先接收文件');
+        showAppToast(context, mine ? context.l10n.waitingPeerAcceptFile : context.l10n.pleaseAcceptFileFirst);
         return;
       case FileTransferState.transferring:
-        showAppToast(context, '文件正在传输中');
+        showAppToast(context, context.l10n.fileTransferring);
         return;
       case FileTransferState.rejected:
-        showAppToast(context, mine ? '对方已拒绝该文件' : '已拒绝该文件');
+        showAppToast(context, mine ? context.l10n.peerDeclinedFile : context.l10n.fileDeclined);
         return;
       case FileTransferState.failed:
-        showAppToast(context, '文件传输失败');
+        showAppToast(context, context.l10n.fileTransferFailed);
         return;
       case FileTransferState.success:
         break;
@@ -273,12 +274,12 @@ class _ChatPageState extends State<ChatPage> {
 
     final path = file.localPath;
     if (path == null || path.isEmpty) {
-      showAppToast(context, '本地文件路径不可用');
+      showAppToast(context, context.l10n.localPathUnavailable);
       return;
     }
     if (!await File(path).exists()) {
       if (!mounted) return;
-      showAppToast(context, '本地文件不存在或已被移动');
+      showAppToast(context, context.l10n.localFileMissing);
       return;
     }
 
@@ -298,20 +299,20 @@ class _ChatPageState extends State<ChatPage> {
     if (!mounted) return;
     switch (file.fileState) {
       case FileTransferState.send:
-        showAppToast(context, mine ? '等待对方接收文件' : '请先接收文件');
+        showAppToast(context, mine ? context.l10n.waitingPeerAcceptFile : context.l10n.pleaseAcceptFileFirst);
         return;
       case FileTransferState.transferring:
-        showAppToast(context, '文件正在传输中');
+        showAppToast(context, context.l10n.fileTransferring);
         return;
       case FileTransferState.rejected:
-        showAppToast(context, mine ? '对方已拒绝该文件' : '已拒绝该文件');
+        showAppToast(context, mine ? context.l10n.peerDeclinedFile : context.l10n.fileDeclined);
         return;
       case FileTransferState.failed:
-        showAppToast(context, '文件传输失败');
+        showAppToast(context, context.l10n.fileTransferFailed);
         return;
       case FileTransferState.success:
       case null:
-        showAppToast(context, '本地文件不存在或已被移动');
+        showAppToast(context, context.l10n.localFileMissing);
         return;
     }
   }
@@ -337,12 +338,12 @@ class _ChatPageState extends State<ChatPage> {
                 ),
                 ListTile(
                   leading: Icon(Icons.ios_share_rounded, color: c.textPrimary),
-                  title: Text('分享', style: TextStyle(fontWeight: FontWeight.w600, color: c.textPrimary)),
+                  title: Text(ctx.l10n.share, style: TextStyle(fontWeight: FontWeight.w600, color: c.textPrimary)),
                   onTap: () => Navigator.pop(ctx, 'share'),
                 ),
                 ListTile(
                   leading: Icon(Icons.save_alt_rounded, color: c.textPrimary),
-                  title: Text('另存为', style: TextStyle(fontWeight: FontWeight.w600, color: c.textPrimary)),
+                  title: Text(ctx.l10n.saveAs, style: TextStyle(fontWeight: FontWeight.w600, color: c.textPrimary)),
                   onTap: () => Navigator.pop(ctx, 'save'),
                 ),
               ],
@@ -362,12 +363,12 @@ class _ChatPageState extends State<ChatPage> {
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(path, mimeType: mimeType, name: name)],
-          title: name ?? '文件',
+          title: name ?? context.l10n.file,
           sharePositionOrigin: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
         ),
       );
     } catch (_) {
-      if (mounted) showAppToast(context, '分享失败');
+      if (mounted) showAppToast(context, context.l10n.shareFailed);
     }
   }
 
@@ -377,19 +378,19 @@ class _ChatPageState extends State<ChatPage> {
       if (Platform.isAndroid || Platform.isIOS) {
         final saved = await FlutterFileDialog.saveFile(params: SaveFileDialogParams(sourceFilePath: path, fileName: suggested));
         if (!mounted || saved == null) return;
-        showAppToast(context, '已保存');
+        showAppToast(context, context.l10n.saved);
         return;
       }
       final location = await getSaveLocation(suggestedName: suggested);
       if (location == null) return;
       if (location.path == path) {
-        if (mounted) showAppToast(context, '已保存');
+        if (mounted) showAppToast(context, context.l10n.saved);
         return;
       }
       await File(path).copy(location.path);
-      if (mounted) showAppToast(context, '已保存');
+      if (mounted) showAppToast(context, context.l10n.saved);
     } catch (_) {
-      if (mounted) showAppToast(context, '保存失败');
+      if (mounted) showAppToast(context, context.l10n.saveFailed);
     }
   }
 
@@ -412,11 +413,11 @@ class _ChatPageState extends State<ChatPage> {
     });
   }
 
-  List<_ChatRow> _rowsOf(List<IMessageDisplay> messages) {
+  List<_ChatRow> _rowsOf(List<IMessageDisplay> messages, AppLocalizations l10n) {
     final rows = <_ChatRow>[];
     String? lastDate;
     for (final msg in messages) {
-      final label = _dateLabelOf(msg);
+      final label = _dateLabelOf(msg, l10n);
       if (label != lastDate) {
         rows.add(_ChatRow.date(label));
         lastDate = label;
@@ -426,32 +427,30 @@ class _ChatPageState extends State<ChatPage> {
     return rows;
   }
 
-  String _dateLabelOf(IMessageDisplay message) {
+  String _dateLabelOf(IMessageDisplay message, AppLocalizations l10n) {
     final utc = message.baseMessage?.base?.sendTimestampUtc;
-    if (utc == null) return '今天';
+    if (utc == null) return l10n.today;
     final t = DateTime.fromMillisecondsSinceEpoch(utc.toInt(), isUtc: true).toLocal();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final day = DateTime(t.year, t.month, t.day);
     final diff = today.difference(day).inDays;
-    if (diff == 0) return '今天';
-    if (diff == 1) return '昨天';
-    if (diff < 7) {
-      const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-      return weekdays[t.weekday - 1];
-    }
+    if (diff == 0) return l10n.today;
+    if (diff == 1) return l10n.yesterday;
+    if (diff < 7) return weekdayLabel(l10n, t.weekday);
     return '${t.month}/${t.day}';
   }
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final l10n = context.l10n;
     final messages = _messageModel.messages;
-    final rows = _rowsOf(messages);
+    final rows = _rowsOf(messages, l10n);
     final busy = _sending || _pickingFile;
     final meName = AppSettings.instance.nickname.isNotEmpty
         ? AppSettings.instance.nickname
-        : (InitManager.deviceName ?? '我');
+        : (InitManager.deviceName ?? l10n.me);
     final meId = InitManager.deviceId ?? 'me';
 
     return Scaffold(
@@ -463,7 +462,7 @@ class _ChatPageState extends State<ChatPage> {
               id: widget.device.deviceId ?? _peerName,
               name: _displayName,
               online: _online,
-              lastSeen: lastSeenLabel(widget.device.updateTimestampUtc?.toInt()),
+              lastSeen: lastSeenLabel(context, widget.device.updateTimestampUtc?.toInt()),
               onBack: () => gotoBack(context),
               onProfile: () => startPage(context, ProfilePage(device: widget.device)),
             ),
@@ -559,7 +558,7 @@ class _ChatHeader extends StatelessWidget {
                 children: [
                   Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.textPrimary)),
                   Text(
-                    online ? '在线' : '离线 · 最后在线 $lastSeen',
+                    online ? context.l10n.online : context.l10n.offlineLastSeen(lastSeen),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -588,6 +587,7 @@ class _CipherBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final l10n = context.l10n;
     late final Color bg;
     late final Color fg;
     late final IconData icon;
@@ -601,28 +601,28 @@ class _CipherBanner extends StatelessWidget {
         bg = c.onlineDim;
         fg = c.online;
         icon = Icons.lock_rounded;
-        title = '端到端加密已启用';
-        subtitle = '请与对方核实公钥是否一致';
+        title = l10n.cipherReadyTitle;
+        subtitle = l10n.cipherReadySubtitle;
         break;
       case CipherSessionState.establishing:
         bg = c.accentDim;
         fg = c.accent;
         icon = Icons.sync_rounded;
-        title = '正在建立加密通道…';
+        title = l10n.cipherEstablishing;
         subtitle = null;
         break;
       case CipherSessionState.failed:
         bg = Color.alphaBlend(c.danger.withValues(alpha: 0.12), c.surface);
         fg = c.danger;
         icon = Icons.lock_open_rounded;
-        title = '加密建立失败';
-        subtitle = errorMessage;
+        title = l10n.cipherFailed;
+        subtitle = errorMessage == null ? null : localizeError(l10n, errorMessage);
         break;
       case CipherSessionState.idle:
         bg = c.surfaceAlt;
         fg = c.textSecondary;
         icon = Icons.lock_outline_rounded;
-        title = '等待加密连接';
+        title = l10n.cipherWaiting;
         subtitle = null;
         break;
     }
@@ -655,7 +655,7 @@ class _CipherBanner extends StatelessWidget {
                 ),
               ),
               if (showRetry)
-                Text('重试', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
+                Text(l10n.retry, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
             ],
           ),
         ),
@@ -692,7 +692,7 @@ class _EmptyChat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return EmptyState(text: '与 $peerName 开始对话', sub: '可发送文字或文件，经局域网直连送达', icon: Icons.forum_outlined);
+    return EmptyState(text: context.l10n.startChatWith(peerName), sub: context.l10n.startChatHint, icon: Icons.forum_outlined);
   }
 }
 
@@ -743,7 +743,7 @@ class _MessageBubble extends StatelessWidget {
     final text = _text;
     if (text.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: text));
-    if (context.mounted) showAppToast(context, '已复制');
+    if (context.mounted) showAppToast(context, context.l10n.copied);
   }
 
   @override
@@ -853,18 +853,18 @@ class _FileBubbleBody extends StatelessWidget {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
   }
 
-  static String stateLabel(FileTransferState state, {required bool mine}) {
+  static String stateLabel(FileTransferState state, AppLocalizations l10n, {required bool mine}) {
     switch (state) {
       case FileTransferState.send:
-        return mine ? '等待对方接收' : '待你确认接收';
+        return mine ? l10n.waitingPeerAccept : l10n.waitingYourAccept;
       case FileTransferState.transferring:
-        return '正在传输…';
+        return l10n.transferring;
       case FileTransferState.success:
-        return '传输完成 · 点击打开';
+        return l10n.transferDoneTapOpen;
       case FileTransferState.rejected:
-        return mine ? '对方已拒绝' : '已拒绝';
+        return mine ? l10n.peerDeclined : l10n.declined;
       case FileTransferState.failed:
-        return '传输失败';
+        return l10n.transferFailed;
     }
   }
 
@@ -935,7 +935,7 @@ class _FileBubbleBody extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white, value: file.progress),
                         )
                       : Text(
-                          stateLabel(file.fileState!, mine: mine),
+                          stateLabel(file.fileState!, context.l10n, mine: mine),
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
                         ),
                 ),
@@ -984,10 +984,10 @@ class _FileBubbleBody extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(file.name ?? '文件', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: fg)),
+                        Text(file.name ?? context.l10n.file, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: fg)),
                         if (sizeLabel.isNotEmpty) Text(sizeLabel, style: TextStyle(fontSize: 11.5, color: sub)),
                         const SizedBox(height: 4),
-                        Text(stateLabel(file.fileState!, mine: mine), style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: _stateColor(c))),
+                        Text(stateLabel(file.fileState!, context.l10n, mine: mine), style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: _stateColor(c))),
                       ],
                     ),
                   ),
@@ -1025,7 +1025,7 @@ class _FileBubbleBody extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           visualDensity: VisualDensity.compact,
                         ),
-                        child: const Text('拒绝'),
+                        child: Text(context.l10n.decline),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1038,13 +1038,13 @@ class _FileBubbleBody extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           visualDensity: VisualDensity.compact,
                         ),
-                        child: const Text('接收'),
+                        child: Text(context.l10n.accept),
                       ),
                     ),
                   ],
                 ),
               if (!mine && file.fileState == FileTransferState.success && file.localPath != null)
-                Text('已保存至本地', style: TextStyle(fontSize: 11.5, color: sub)),
+                Text(context.l10n.savedLocally, style: TextStyle(fontSize: 11.5, color: sub)),
             ],
           ),
         ),
@@ -1136,7 +1136,7 @@ class _ComposerState extends State<_Composer> {
             height: 34,
             child: IconButton(
               onPressed: widget.busy ? null : widget.onAttach,
-              tooltip: '发送文件',
+              tooltip: context.l10n.sendFile,
               padding: EdgeInsets.zero,
               style: IconButton.styleFrom(
                 backgroundColor: c.surfaceAlt,
@@ -1159,7 +1159,7 @@ class _ComposerState extends State<_Composer> {
               inputFormatters: [LengthLimitingTextInputFormatter(2000)],
               style: TextStyle(fontSize: 14, color: c.textPrimary, height: 1.35),
               decoration: InputDecoration(
-                hintText: '发送消息...',
+                hintText: context.l10n.messageHint,
                 hintStyle: TextStyle(color: c.textTertiary, fontSize: 14),
                 filled: true,
                 fillColor: c.surfaceAlt,

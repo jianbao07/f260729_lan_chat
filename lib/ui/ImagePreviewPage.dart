@@ -4,6 +4,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:gal/gal.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:yf_code/l10n/l10n.dart';
 import 'package:yf_code/theme/AppColors.dart';
 import 'package:yf_code/ui/widgets/AppChrome.dart';
 import 'package:yf_code/utils/page.dart';
@@ -25,7 +26,7 @@ class _ImagePreviewPageState extends State<ImagePreviewPage> {
   String get _title {
     final name = widget.name?.trim();
     if (name != null && name.isNotEmpty) return name;
-    return '图片';
+    return context.l10n.image;
   }
 
   Future<void> _share() async {
@@ -41,7 +42,7 @@ class _ImagePreviewPageState extends State<ImagePreviewPage> {
         ),
       );
     } catch (_) {
-      if (mounted) showAppToast(context, '分享失败');
+      if (mounted) showAppToast(context, context.l10n.shareFailed);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -60,18 +61,19 @@ class _ImagePreviewPageState extends State<ImagePreviewPage> {
       if (!mounted) return;
       showAppToast(context, _galError(e));
     } catch (_) {
-      if (mounted) showAppToast(context, '保存失败');
+      if (mounted) showAppToast(context, context.l10n.saveFailed);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _saveToGallery() async {
+    final l10n = context.l10n;
     final granted = await Gal.hasAccess();
     if (!granted) {
       final ok = await Gal.requestAccess();
       if (!ok) {
-        if (mounted) showAppToast(context, '没有相册权限');
+        if (mounted) showAppToast(context, l10n.noAlbumPermission);
         return;
       }
     }
@@ -79,34 +81,34 @@ class _ImagePreviewPageState extends State<ImagePreviewPage> {
     final sep = path.lastIndexOf(Platform.pathSeparator);
     final dot = path.lastIndexOf('.');
     if (dot > sep) {
-      await Gal.putImage(path, album: '内网通');
+      await Gal.putImage(path, album: l10n.appName);
     } else {
-      await Gal.putImageBytes(await File(path).readAsBytes(), album: '内网通', name: 'image');
+      await Gal.putImageBytes(await File(path).readAsBytes(), album: l10n.appName, name: 'image');
     }
-    if (mounted) showAppToast(context, '已保存到相册');
+    if (mounted) showAppToast(context, l10n.savedToAlbum);
   }
 
   Future<void> _saveWithPicker() async {
     final location = await getSaveLocation(suggestedName: _title);
     if (location == null) return;
     if (location.path == widget.path) {
-      if (mounted) showAppToast(context, '已保存');
+      if (mounted) showAppToast(context, context.l10n.saved);
       return;
     }
     await File(widget.path).copy(location.path);
-    if (mounted) showAppToast(context, '已保存');
+    if (mounted) showAppToast(context, context.l10n.saved);
   }
 
   String _galError(GalException e) {
     switch (e.type) {
       case GalExceptionType.accessDenied:
-        return '没有相册权限';
+        return context.l10n.noAlbumPermission;
       case GalExceptionType.notEnoughSpace:
-        return '存储空间不足';
+        return context.l10n.notEnoughSpace;
       case GalExceptionType.notSupportedFormat:
-        return '不支持该图片格式';
+        return context.l10n.unsupportedImageFormat;
       case GalExceptionType.unexpected:
-        return '保存失败';
+        return context.l10n.saveFailed;
     }
   }
 
@@ -145,7 +147,7 @@ class _ImagePreviewPageState extends State<ImagePreviewPage> {
                   child: Image.file(
                     File(widget.path),
                     fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) => const Text('无法显示图片', style: TextStyle(color: Colors.white70)),
+                    errorBuilder: (context, error, stackTrace) => Text(context.l10n.cannotDisplayImage, style: const TextStyle(color: Colors.white70)),
                   ),
                 ),
               ),
@@ -159,7 +161,7 @@ class _ImagePreviewPageState extends State<ImagePreviewPage> {
                     child: TextButton.icon(
                       onPressed: _busy ? null : _share,
                       icon: const Icon(Icons.ios_share_rounded, size: 18),
-                      label: const Text('分享'),
+                      label: Text(context.l10n.share),
                       style: TextButton.styleFrom(foregroundColor: Colors.white),
                     ),
                   ),
@@ -169,7 +171,7 @@ class _ImagePreviewPageState extends State<ImagePreviewPage> {
                       icon: _busy
                           ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: c.accent))
                           : const Icon(Icons.download_rounded, size: 18),
-                      label: const Text('保存'),
+                      label: Text(context.l10n.save),
                       style: TextButton.styleFrom(foregroundColor: Colors.white),
                     ),
                   ),

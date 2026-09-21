@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:yf_code/bean/ConversationBean.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
 import 'package:yf_code/manager/OnlineDeviceManager.dart';
+import 'package:yf_code/l10n/l10n.dart';
 import 'package:yf_code/model/AppSettings.dart';
 import 'package:yf_code/model/ConversationModel.dart';
 import 'package:yf_code/model/OnlineDeviceModel.dart';
@@ -78,7 +79,7 @@ class _ConversationPageState extends State<ConversationPage> {
     if (name != null && name.isNotEmpty) return name;
     final id = conversation.conversationDeviceId;
     if (id != null && id.isNotEmpty) return id;
-    return '未知设备';
+    return context.l10n.unknownDevice;
   }
 
   Future<DeviceBean?> _resolveDevice(ConversationBean conversation) async {
@@ -93,7 +94,7 @@ class _ConversationPageState extends State<ConversationPage> {
     final device = await _resolveDevice(conversation);
     if (!mounted) return;
     if (device == null) {
-      showAppToast(context, '找不到该设备信息');
+      showAppToast(context, context.l10n.deviceNotFound);
       return;
     }
     startPage(context, ChatPage(device: device));
@@ -103,7 +104,7 @@ class _ConversationPageState extends State<ConversationPage> {
     final device = await _resolveDevice(conversation);
     if (!mounted) return;
     if (device == null) {
-      showAppToast(context, '找不到该设备信息');
+      showAppToast(context, context.l10n.deviceNotFound);
       return;
     }
     startPage(context, ProfilePage(device: device));
@@ -113,7 +114,7 @@ class _ConversationPageState extends State<ConversationPage> {
   Widget build(BuildContext context) {
     final conversations = ConversationModel.instance.deviceList;
     if (conversations.isEmpty) {
-      return const EmptyState(text: '暂时没有会话', sub: '发现在线设备后，向他打个招呼吧');
+      return EmptyState(text: context.l10n.noConversations, sub: context.l10n.noConversationsHint);
     }
     return ListView.builder(
       itemCount: conversations.length,
@@ -149,7 +150,7 @@ class _ConversationTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final preview = conversation.lastMessagesPreview;
-    final subtitle = (preview != null && preview.isNotEmpty) ? preview : '暂无消息';
+    final subtitle = (preview != null && preview.isNotEmpty) ? preview : context.l10n.noMessages;
     final online = conversation.isOnline();
     final id = conversation.conversationDeviceId ?? displayName;
 
@@ -190,7 +191,7 @@ class _ConversationTile extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          relativeTimeLabel(conversation.lastMessagesTimestampUtc),
+                          relativeTimeLabel(context, conversation.lastMessagesTimestampUtc),
                           style: TextStyle(fontSize: 12, color: c.textTertiary, fontFamily: kMonoFont),
                         ),
                       ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yf_code/l10n/l10n.dart';
 import 'package:yf_code/theme/AppColors.dart';
 import 'package:yf_code/ui/ConversationPage.dart';
 import 'package:yf_code/ui/MePage.dart';
@@ -18,6 +19,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final l10n = context.l10n;
     return Scaffold(
       backgroundColor: c.bg,
       body: SafeArea(
@@ -28,7 +30,7 @@ class _HomePageState extends State<HomePage> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
                 child: Text(
-                  _currentIndex == 0 ? '会话' : '局域网设备',
+                  _currentIndex == 0 ? l10n.tabChats : l10n.lanDevices,
                   style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, color: c.textPrimary),
                 ),
               ),
@@ -50,19 +52,19 @@ class _HomePageState extends State<HomePage> {
               child: Row(
                 children: [
                   AppTabButton(
-                    label: '会话',
+                    label: l10n.tabChats,
                     icon: Icons.chat_bubble_outline_rounded,
                     active: _currentIndex == 0,
                     onTap: () => setState(() => _currentIndex = 0),
                   ),
                   AppTabButton(
-                    label: '设备',
+                    label: l10n.tabDevices,
                     icon: Icons.radar,
                     active: _currentIndex == 1,
                     onTap: () => setState(() => _currentIndex = 1),
                   ),
                   AppTabButton(
-                    label: '我的',
+                    label: l10n.tabMe,
                     icon: Icons.person_outline_rounded,
                     active: _currentIndex == 2,
                     onTap: () => setState(() => _currentIndex = 2),

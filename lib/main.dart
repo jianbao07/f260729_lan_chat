@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:yf_code/model/AppSettings.dart';
 import 'package:yf_code/theme/AppColors.dart';
-import 'package:yf_code/ui/HomePage.dart';
-import 'package:yf_code/InitManager.dart';
+import 'package:yf_code/l10n/l10n.dart';
+import 'package:yf_code/ui/SplashPage.dart';
 import 'package:yf_code/manager/FileTransferManager.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -11,7 +11,6 @@ final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   FileTransferManager.navigatorKey = appNavigatorKey;
-  InitManager.initApp();
   runApp(const MyApp());
 }
 
@@ -52,12 +51,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       value: overlay.copyWith(statusBarColor: Colors.transparent, systemNavigationBarColor: colors.surface),
       child: MaterialApp(
         navigatorKey: appNavigatorKey,
-        title: '内网通',
+        onGenerateTitle: (context) => context.l10n.appName,
         debugShowCheckedModeBanner: false,
         theme: AppColors.theme(AppColors.light, Brightness.light),
         darkTheme: AppColors.theme(AppColors.dark, Brightness.dark),
         themeMode: settings.themeMode,
-        home: const HomePage(),
+        locale: settings.materialLocale,
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: const SplashPage(),
       ),
     );
   }

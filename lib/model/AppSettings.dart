@@ -10,6 +10,7 @@ class AppSettings extends ChangeNotifier {
   static final AppSettings instance = AppSettings._();
 
   String theme = 'system';
+  String localeMode = 'system';
   String nickname = '';
   bool notifOn = true;
   bool discoverable = true;
@@ -38,6 +39,17 @@ class AppSettings extends ChangeNotifier {
     }
   }
 
+  Locale? get materialLocale {
+    switch (localeMode) {
+      case 'zh':
+        return const Locale('zh');
+      case 'en':
+        return const Locale('en');
+      default:
+        return null;
+    }
+  }
+
   String displayNameOf(String? deviceId, String fallback) {
     if (deviceId == null || deviceId.isEmpty) return fallback;
     final remark = remarks[deviceId];
@@ -57,6 +69,8 @@ class AppSettings extends ChangeNotifier {
       final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
       final savedTheme = json['theme'] as String?;
       theme = (savedTheme == 'light' || savedTheme == 'dark' || savedTheme == 'system') ? savedTheme! : 'system';
+      final savedLocale = json['localeMode'] as String?;
+      localeMode = (savedLocale == 'zh' || savedLocale == 'en' || savedLocale == 'system') ? savedLocale! : 'system';
       nickname = (json['nickname'] as String?) ?? '';
       notifOn = json['notifOn'] != false;
       discoverable = json['discoverable'] != false;
@@ -73,6 +87,12 @@ class AppSettings extends ChangeNotifier {
 
   Future<void> setTheme(String value) async {
     theme = (value == 'light' || value == 'dark') ? value : 'system';
+    notifyListeners();
+    await _save();
+  }
+
+  Future<void> setLocaleMode(String value) async {
+    localeMode = (value == 'zh' || value == 'en') ? value : 'system';
     notifyListeners();
     await _save();
   }
@@ -117,6 +137,7 @@ class AppSettings extends ChangeNotifier {
       final file = await _file();
       await file.writeAsString(jsonEncode({
         'theme': theme,
+        'localeMode': localeMode,
         'nickname': nickname,
         'notifOn': notifOn,
         'discoverable': discoverable,

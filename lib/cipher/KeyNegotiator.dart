@@ -8,6 +8,7 @@ import 'package:yf_code/channel/TextChannel.dart';
 import 'package:yf_code/cipher/AesCipher.dart';
 import 'package:yf_code/cipher/Ed25519Key.dart';
 import 'package:yf_code/enum/CipherSessionState.dart';
+import 'package:yf_code/l10n/app_error_code.dart';
 import 'package:yf_code/manager/OnlineDeviceManager.dart';
 import 'package:yf_code/utils/log.dart';
 
@@ -97,12 +98,12 @@ class KeyNegotiator {
       final result = await TextChannel.ensureConnect(ip);
       if (!identical(_sessions[ip], s)) return;
       if (!result.isSuccess) {
-        _fail(s, result.error ?? "连接建立失败");
+        _fail(s, result.error ?? AppErrorCode.connectFailed);
         return;
       }
     }
     if (!await _sendTempPublicKey(s) && identical(_sessions[ip], s)) {
-      _fail(s, "协商消息发送失败");
+      _fail(s, AppErrorCode.negotiateSendFailed);
     }
   }
 
@@ -111,19 +112,19 @@ class KeyNegotiator {
     final sign = _hexDecode(msg.tempPublicKeySign);
     final idPk = _hexDecode(msg.beatBean?.publicKey);
     if (peerPk == null || peerPk.length != Ed25519Key.keyLength) {
-      _fail(_ensureSession(ip), "对方临时公钥无效");
+      _fail(_ensureSession(ip), AppErrorCode.peerTempKeyInvalid);
       return;
     }
     if (sign == null || sign.length != Ed25519Key.signatureLength || idPk == null || idPk.length != Ed25519Key.keyLength) {
-      _fail(_ensureSession(ip), "对方身份签名无效");
+      _fail(_ensureSession(ip), AppErrorCode.peerIdentityInvalid);
       return;
     }
     if (!await Ed25519Key.verify(peerPk, signature: sign, publicKey: idPk)) {
-      _fail(_ensureSession(ip), "对方临时公钥验签失败");
+      _fail(_ensureSession(ip), AppErrorCode.peerTempKeyVerifyFailed);
       return;
     }
     if (!await _identityMatchesKnownDevice(msg, ip)) {
-      _fail(_ensureSession(ip), "对方身份与已知设备不符");
+      _fail(_ensureSession(ip), AppErrorCode.peerIdentityMismatch);
       return;
     }
 
@@ -138,14 +139,14 @@ class KeyNegotiator {
     s.peerTempPublic = peerPk;
     if (!s.sentTempKey) {
       if (!await _sendTempPublicKey(s) && identical(_sessions[ip], s)) {
-        _fail(s, "协商消息发送失败");
+        _fail(s, AppErrorCode.negotiateSendFailed);
         return;
       }
     }
     if (!identical(_sessions[ip], s) || s.localTemp == null || !s.sentTempKey) return;
     s.aes = AesCipher(await s.localTemp!.deriveSharedKey(peerPk));
     if (!await _sendCiphertextOk(s) && identical(_sessions[ip], s)) {
-      _fail(s, "协商消息发送失败");
+      _fail(s, AppErrorCode.negotiateSendFailed);
       return;
     }
     final pending = s.pendingOk;
@@ -164,20 +165,20 @@ class KeyNegotiator {
     }
     final raw = msg.peerTempPublicKeyCiphertext;
     if (raw == null || raw.isEmpty) {
-      _fail(s, "密钥确认密文为空");
+      _fail(s, AppErrorCode.confirmCipherEmpty);
       return;
     }
     try {
       final plain = await s.aes!.decrypt(base64Decode(raw));
       if (!identical(_sessions[ip], s)) return;
       if (!listEquals(plain, s.localTemp!.publicKey)) {
-        _fail(s, "密钥确认与本地临时公钥不一致");
+        _fail(s, AppErrorCode.confirmMismatch);
         return;
       }
       _emit(s, CipherSessionState.ready);
       iLog("密钥协商完成，可加密传输 ip=$ip");
     } catch (e) {
-      _fail(s, "密钥确认解密失败");
+      _fail(s, AppErrorCode.confirmDecryptFailed);
     }
   }
 
@@ -248,7 +249,7 @@ class KeyNegotiator {
       } catch (e) {
         iLog("密钥协商异常 ip=$ip err=$e");
         final s = _sessions[ip];
-        if (s != null) _fail(s, "密钥协商异常: $e");
+        if (s != null) _fail(s, AppErrorCode.negotiateException);
       }
     });
     _inflight[ip] = next;

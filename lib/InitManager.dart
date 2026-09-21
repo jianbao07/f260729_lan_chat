@@ -20,7 +20,13 @@ class InitManager{
   static String version = '—';
   static String buildNumber = '';
 
-  static void initApp()async{
+  static Future<void>? _initFuture;
+
+  static Future<void> initApp() {
+    return _initFuture ??= _doInit();
+  }
+
+  static Future<void> _doInit() async {
     await _getDeviceInfo();
     await _getPackageInfo();
     await AppSettings.instance.load();

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:yf_code/InitManager.dart';
+import 'package:yf_code/l10n/l10n.dart';
 import 'package:yf_code/ui/widgets/AppChrome.dart';
 
 PageRoute<T> _slideRoute<T>(Widget page) {
@@ -57,7 +58,7 @@ void gotoProtocolText(ProtocolEnum type, BuildContext context) {
   final packName = InitManager.packageName.isEmpty ? 'com.ljb.lanchat' : InitManager.packageName;
   final uri = Uri.https('jianbao07.github.io', '/Privacy-Policy-and-User-Agreement/index.html', {
     'content_type': type.code,
-    'language': 'zh',
+    'language': Localizations.localeOf(context).languageCode == 'en' ? 'en' : 'zh',
     'pack_name': packName,
   });
   gotoH5(uri.toString(), context: context);
@@ -68,8 +69,8 @@ Future<void> gotoH5(String url, {bool inApp = false, required BuildContext conte
   final mode = inApp ? LaunchMode.inAppWebView : LaunchMode.externalApplication;
   try {
     final ok = await launchUrl(uri, mode: mode);
-    if (!ok && context.mounted) showAppToast(context, '无法打开页面');
+    if (!ok && context.mounted) showAppToast(context, context.l10n.cannotOpenPage);
   } catch (_) {
-    if (context.mounted) showAppToast(context, '无法打开页面');
+    if (context.mounted) showAppToast(context, context.l10n.cannotOpenPage);
   }
 }

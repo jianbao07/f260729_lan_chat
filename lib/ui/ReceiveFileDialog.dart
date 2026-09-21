@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yf_code/l10n/l10n.dart';
 import 'package:yf_code/manager/FileTransferManager.dart';
 import 'package:yf_code/session/FileTransferSession.dart';
 import 'package:yf_code/theme/AppColors.dart';
@@ -18,7 +19,7 @@ class _ReceiveFileDialogState extends State<ReceiveFileDialog> {
   FileTransferSession? get _session => FileTransferManager.get(widget.transferId);
 
   String _formatSize(int? bytes) {
-    if (bytes == null || bytes < 0) return '未知大小';
+    if (bytes == null || bytes < 0) return context.l10n.unknownSize;
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
@@ -42,14 +43,15 @@ class _ReceiveFileDialogState extends State<ReceiveFileDialog> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final l10n = context.l10n;
     final session = _session;
-    final name = session?.name ?? '未知文件';
+    final name = session?.name ?? l10n.unknownFile;
     final sizeLabel = _formatSize(session?.totalSize);
 
     return AlertDialog(
       backgroundColor: c.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: c.border)),
-      title: Text('收到文件', style: TextStyle(fontWeight: FontWeight.w700, color: c.textPrimary)),
+      title: Text(l10n.incomingFile, style: TextStyle(fontWeight: FontWeight.w700, color: c.textPrimary)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -67,12 +69,12 @@ class _ReceiveFileDialogState extends State<ReceiveFileDialog> {
         TextButton(
           onPressed: _busy ? null : _onReject,
           style: TextButton.styleFrom(foregroundColor: c.danger),
-          child: const Text('拒绝'),
+          child: Text(l10n.decline),
         ),
         FilledButton(
           onPressed: _busy ? null : _onAccept,
           style: FilledButton.styleFrom(backgroundColor: c.accent, foregroundColor: c.onAccent),
-          child: const Text('接收'),
+          child: Text(l10n.accept),
         ),
       ],
     );

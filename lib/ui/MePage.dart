@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:yf_code/InitManager.dart';
 import 'package:yf_code/cipher/Ed25519Key.dart';
+import 'package:yf_code/l10n/l10n.dart';
 import 'package:yf_code/manager/OnlineDeviceManager.dart';
 import 'package:yf_code/model/AppSettings.dart';
 import 'package:yf_code/theme/AppColors.dart';
@@ -22,7 +23,7 @@ class _MePageState extends State<MePage> {
   String? _publicKey;
 
   String get _deviceId => InitManager.deviceId ?? '—';
-  String get _deviceName => InitManager.rawDeviceName ?? InitManager.deviceName ?? '本机';
+  String get _deviceName => InitManager.rawDeviceName ?? InitManager.deviceName ?? context.l10n.thisDevice;
 
   @override
   void initState() {
@@ -58,43 +59,48 @@ class _MePageState extends State<MePage> {
     final nickname = settings.nickname;
     final displayName = nickname.isNotEmpty ? nickname : _deviceName;
     final c = context.colors;
+    final l10n = context.l10n;
 
     final content = ListView(
       children: [
         ProfileHero(
           id: _deviceId,
           displayName: displayName,
-          originalName: nickname.isNotEmpty ? '设备名 $_deviceName' : null,
+          originalName: nickname.isNotEmpty ? l10n.deviceNameLabel(_deviceName) : null,
           showStatus: false,
         ),
-        const SectionLabel(text: '本机信息'),
+        SectionLabel(text: l10n.sectionDeviceInfo),
         SettingsCard(
           children: [
             EditableRow(
-              label: '昵称',
+              label: l10n.nickname,
               value: nickname,
               inputPlaceholder: _deviceName,
-              emptyLabel: '点击设置昵称',
+              emptyLabel: l10n.tapToSetNickname,
               onSave: (val) {
                 settings.setNickname(val);
                 InitManager.deviceName = val.isEmpty ? InitManager.rawDeviceName : val;
-                showAppToast(context, val.isEmpty ? '已清除昵称' : '昵称已保存');
+                showAppToast(context, val.isEmpty ? l10n.nicknameCleared : l10n.nicknameSaved);
               },
             ),
-            InfoRow(label: 'IP 地址', value: _ip ?? '—', mono: true),
-            InfoRow(label: '设备 ID', value: _deviceId, mono: true, detail: true),
-            InfoRow(label: '公钥', value: _publicKey ?? '—', mono: true, detail: true, showDivider: false),
+            InfoRow(label: l10n.ipAddress, value: _ip ?? '—', mono: true),
+            InfoRow(label: l10n.deviceId, value: _deviceId, mono: true, detail: true),
+            InfoRow(label: l10n.publicKey, value: _publicKey ?? '—', mono: true, detail: true, showDivider: false),
           ],
         ),
-        const SectionLabel(text: '通用设置'),
+        SectionLabel(text: l10n.sectionGeneral),
         SettingsCard(
           children: [
             InfoRow(
-              label: '主题',
+              label: l10n.theme,
               child: _ThemePicker(value: settings.theme, onChanged: settings.setTheme),
             ),
             InfoRow(
-              label: '消息通知',
+              label: l10n.language,
+              child: _LocalePicker(value: settings.localeMode, onChanged: settings.setLocaleMode),
+            ),
+            InfoRow(
+              label: l10n.notifications,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -105,7 +111,7 @@ class _MePageState extends State<MePage> {
               ),
             ),
             InfoRow(
-              label: '允许被局域网发现',
+              label: l10n.discoverable,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -126,7 +132,7 @@ class _MePageState extends State<MePage> {
               ),
             ),
             InfoRow(
-              label: '加密传输',
+              label: l10n.encryptTransfer,
               showDivider: false,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -139,14 +145,14 @@ class _MePageState extends State<MePage> {
             ),
           ],
         ),
-        const SectionLabel(text: '关于'),
+        SectionLabel(text: l10n.sectionAbout),
         SettingsCard(
           children: [
-            InfoRow(label: '版本号', value: InitManager.version, mono: true),
-            _ActionRow(label: '隐私政策', onTap: () => gotoProtocolText(ProtocolEnum.pp, context)),
-            _ActionRow(label: '用户协议', onTap: () => gotoProtocolText(ProtocolEnum.ua, context)),
+            InfoRow(label: l10n.version, value: InitManager.version, mono: true),
+            _ActionRow(label: l10n.privacyPolicy, onTap: () => gotoProtocolText(ProtocolEnum.pp, context)),
+            _ActionRow(label: l10n.userAgreement, onTap: () => gotoProtocolText(ProtocolEnum.ua, context)),
             _ActionRow(
-              label: '帮助与反馈',
+              label: l10n.helpFeedback,
               onTap: () => gotoH5(
                 'https://docs.google.com/forms/d/e/1FAIpQLScAC2DcIqJI_Fg1WDSeg_XsjvFwPquD6vJK-bqIhZBfvfzXEw/viewform?usp=publish-editor',
                 context: context,
@@ -173,7 +179,7 @@ class _MePageState extends State<MePage> {
                     onPressed: () => gotoBack(context),
                     icon: Icon(Icons.arrow_back, size: 19, color: c.textPrimary),
                   ),
-                  Text('我的', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                  Text(l10n.tabMe, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.textPrimary)),
                 ],
               ),
             ),
@@ -196,12 +202,63 @@ class _ThemePicker extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _chip(context, 'system', '系统'),
+        _chip(context, 'system', context.l10n.themeSystem),
         const SizedBox(width: 6),
-        _chip(context, 'dark', '深色'),
+        _chip(context, 'dark', context.l10n.themeDark),
         const SizedBox(width: 6),
-        _chip(context, 'light', '浅色'),
+        _chip(context, 'light', context.l10n.themeLight),
       ],
+    );
+  }
+
+  Widget _chip(BuildContext context, String id, String label) {
+    final c = context.colors;
+    final active = value == id;
+    return GestureDetector(
+      onTap: () => onChanged(id),
+      child: Container(
+        height: 26,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: active ? c.accent : c.surfaceAlt,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: active ? c.accent : c.border),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: active ? c.onAccent : c.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LocalePicker extends StatelessWidget {
+  const _LocalePicker({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerRight,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _chip(context, 'system', context.l10n.localeSystem),
+          const SizedBox(width: 6),
+          _chip(context, 'zh', context.l10n.localeZh),
+          const SizedBox(width: 6),
+          _chip(context, 'en', context.l10n.localeEn),
+        ],
+      ),
     );
   }
 

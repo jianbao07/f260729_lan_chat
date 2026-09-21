@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
 import 'package:yf_code/manager/OnlineDeviceManager.dart';
+import 'package:yf_code/l10n/l10n.dart';
 import 'package:yf_code/model/AppSettings.dart';
 import 'package:yf_code/model/OnlineDeviceModel.dart';
 import 'package:yf_code/theme/AppColors.dart';
@@ -54,14 +55,15 @@ class _OnlineDevicePageState extends State<OnlineDevicePage> {
     if (!mounted) return;
     setState(() => _scanning = false);
     final count = OnlineDeviceModel.instance.deviceList.length;
-    showAppToast(context, '扫描完成，共发现 $count 台设备');
+    showAppToast(context, context.l10n.scanDone(count));
   }
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final l10n = context.l10n;
     final devices = OnlineDeviceModel.instance.deviceList;
-    final subnet = _cidr != null ? ' · 网段 $_cidr' : '';
+    final subnet = _cidr != null ? l10n.subnetSuffix(_cidr!) : '';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -72,7 +74,7 @@ class _OnlineDevicePageState extends State<OnlineDevicePage> {
             children: [
               Expanded(
                 child: Text(
-                  '${devices.length} 台在线$subnet',
+                  '${l10n.onlineCount(devices.length)}$subnet',
                   style: TextStyle(fontSize: 12.5, color: c.textSecondary, fontFamily: kMonoFont),
                 ),
               ),
@@ -100,7 +102,7 @@ class _OnlineDevicePageState extends State<OnlineDevicePage> {
         ),
         Expanded(
           child: devices.isEmpty
-              ? const EmptyState(text: '暂无在线设备', sub: '确保对方已打开应用，并连接到同一网络')
+              ? EmptyState(text: l10n.noOnlineDevices, sub: l10n.noOnlineDevicesHint)
               : ListView.builder(
                   itemCount: devices.length,
                   itemBuilder: (context, index) => _DeviceRow(device: devices[index]),
@@ -119,7 +121,7 @@ class _DeviceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final rawName = device.name?.isNotEmpty == true ? device.name! : '未知设备';
+    final rawName = device.name?.isNotEmpty == true ? device.name! : context.l10n.unknownDevice;
     final displayName = AppSettings.instance.displayNameOf(device.deviceId, rawName);
     final id = device.deviceId ?? displayName;
 

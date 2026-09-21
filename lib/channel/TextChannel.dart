@@ -8,6 +8,7 @@ import 'package:yf_code/cipher/KeyNegotiator.dart';
 import 'package:yf_code/enum/PayloadType.dart';
 import 'package:yf_code/manager/MessageManager.dart';
 import 'package:yf_code/model/AppSettings.dart';
+import 'package:yf_code/l10n/app_error_code.dart';
 import 'package:yf_code/utils/log.dart';
 
 /// [isOutgoing] true=本机发起，false=对端连入；[isEstablished] true=建立，false=销毁。
@@ -52,7 +53,7 @@ class TextChannel {
     } catch (e) {
       iLog("建立文本连接失败 to=$ip:$_MESSAGE_PORT err=$e");
       _removeConnect(ip);
-      return Result.failure("连接建立失败");
+      return Result.failure(AppErrorCode.connectFailed);
     }
   }
 
@@ -71,7 +72,7 @@ class TextChannel {
       var type = PayloadType.jsonString;
       if (AppSettings.instance.encryptOn && KeyNegotiator.isReady(ip)) {
         final aes = KeyNegotiator.cipherOf(ip);
-        if (aes == null) return Result.failure("加密通道未就绪");
+        if (aes == null) return Result.failure(AppErrorCode.cipherNotReady);
         body = Uint8List.fromList(await aes.encrypt(plainPayload));
         type = PayloadType.jsonStringCipher;
       }
@@ -83,7 +84,7 @@ class TextChannel {
     } catch (e) {
       iLog("消息发送失败 to=$ip:$_MESSAGE_PORT err=$e");
       _removeConnect(ip);
-      return Result.failure("消息发送失败");
+      return Result.failure(AppErrorCode.sendFailed);
     }
   }
 

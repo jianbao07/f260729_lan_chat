@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
+import 'package:yf_code/l10n/l10n.dart';
 import 'package:yf_code/model/AppSettings.dart';
 import 'package:yf_code/model/OnlineDeviceModel.dart';
 import 'package:yf_code/theme/AppColors.dart';
@@ -43,7 +44,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String get _peerName {
     final name = widget.device.name;
     if (name != null && name.isNotEmpty) return name;
-    return widget.device.deviceId ?? '未知设备';
+    return widget.device.deviceId ?? context.l10n.unknownDevice;
   }
 
   String get _publicKey {
@@ -55,6 +56,7 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final l10n = context.l10n;
     final id = widget.device.deviceId ?? '';
     final remark = AppSettings.instance.remarkOf(id);
     final displayName = remark.isNotEmpty ? remark : _peerName;
@@ -72,7 +74,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     onPressed: () => gotoBack(context),
                     icon: Icon(Icons.arrow_back, size: 19, color: c.textPrimary),
                   ),
-                  Text('详细资料', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                  Text(l10n.profileTitle, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.textPrimary)),
                 ],
               ),
             ),
@@ -82,26 +84,26 @@ class _ProfilePageState extends State<ProfilePage> {
                   ProfileHero(
                     id: id.isEmpty ? _peerName : id,
                     displayName: displayName,
-                    originalName: remark.isNotEmpty ? '原名 $_peerName' : null,
+                    originalName: remark.isNotEmpty ? l10n.originalName(_peerName) : null,
                     online: _online,
-                    lastSeen: lastSeenLabel(widget.device.updateTimestampUtc?.toInt()),
+                    lastSeen: lastSeenLabel(context, widget.device.updateTimestampUtc?.toInt()),
                   ),
                   SettingsCard(
                     children: [
                       EditableRow(
-                        label: '备注',
+                        label: l10n.remark,
                         value: remark,
                         inputPlaceholder: _peerName,
-                        emptyLabel: '点击设置备注',
+                        emptyLabel: l10n.tapToSetRemark,
                         onSave: (val) {
                           if (id.isEmpty) return;
                           AppSettings.instance.setRemark(id, val);
-                          showAppToast(context, val.isEmpty ? '已清除备注' : '备注已保存');
+                          showAppToast(context, val.isEmpty ? l10n.remarkCleared : l10n.remarkSaved);
                         },
                       ),
-                      InfoRow(label: 'IP 地址', value: widget.device.ipAddress ?? '—', mono: true),
-                      InfoRow(label: '设备 ID', value: id.isEmpty ? '—' : id, mono: true, detail: true),
-                      InfoRow(label: '公钥', value: _publicKey, mono: true, detail: true, showDivider: false),
+                      InfoRow(label: l10n.ipAddress, value: widget.device.ipAddress ?? '—', mono: true),
+                      InfoRow(label: l10n.deviceId, value: id.isEmpty ? '—' : id, mono: true, detail: true),
+                      InfoRow(label: l10n.publicKey, value: _publicKey, mono: true, detail: true, showDivider: false),
                     ],
                   ),
                 ],
@@ -116,7 +118,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: FilledButton.icon(
                   onPressed: () => startPageReplace(context, ChatPage(device: widget.device)),
                   icon: const Icon(Icons.send, size: 16),
-                  label: const Text('发送消息', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
+                  label: Text(l10n.sendMessage, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
                   style: FilledButton.styleFrom(
                     backgroundColor: c.accent,
                     foregroundColor: c.onAccent,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:yf_code/l10n/l10n.dart';
 import 'package:yf_code/theme/AppColors.dart';
 import 'package:yf_code/ui/widgets/PeerAvatar.dart';
 
@@ -50,12 +51,12 @@ void showInfoDetailDialog(BuildContext context, {required String title, required
                   setState(() => copied = true);
                 },
                 style: TextButton.styleFrom(foregroundColor: c.textSecondary),
-                child: Text(copied ? '已复制' : '复制'),
+                child: Text(copied ? ctx.l10n.copied : ctx.l10n.copy),
               ),
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop(),
                 style: FilledButton.styleFrom(backgroundColor: c.accent, foregroundColor: c.onAccent),
-                child: const Text('关闭'),
+                child: Text(ctx.l10n.close),
               ),
             ],
           );
@@ -63,32 +64,6 @@ void showInfoDetailDialog(BuildContext context, {required String title, required
       );
     },
   );
-}
-
-String relativeTimeLabel(int? utcMs) {
-  if (utcMs == null) return '';
-  final last = DateTime.fromMillisecondsSinceEpoch(utcMs, isUtc: true);
-  final diff = DateTime.now().toUtc().difference(last);
-  if (diff.inSeconds < 60) return '刚刚';
-  if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前';
-  final local = last.toLocal();
-  final now = DateTime.now();
-  if (local.year == now.year && local.month == now.month && local.day == now.day) {
-    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-  }
-  if (local.year == now.year) return '${local.month}/${local.day}';
-  return '${local.year}/${local.month}/${local.day}';
-}
-
-String lastSeenLabel(int? utcMs) {
-  if (utcMs == null) return '未知';
-  final last = DateTime.fromMillisecondsSinceEpoch(utcMs, isUtc: true);
-  final diff = DateTime.now().toUtc().difference(last);
-  if (diff.inSeconds < 60) return '刚刚';
-  if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前';
-  if (diff.inHours < 24) return '${diff.inHours} 小时前';
-  if (diff.inDays < 7) return '${diff.inDays} 天前';
-  return relativeTimeLabel(utcMs);
 }
 
 class EmptyState extends StatelessWidget {
@@ -577,7 +552,7 @@ class ProfileHero extends StatelessWidget {
                   const SizedBox(width: 6),
                 ],
                 Text(
-                  isOnline ? '在线' : '离线 · 最后在线 ${lastSeen ?? '未知'}',
+                  isOnline ? context.l10n.online : context.l10n.offlineLastSeen(lastSeen ?? context.l10n.unknown),
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: isOnline ? FontWeight.w600 : FontWeight.w400,

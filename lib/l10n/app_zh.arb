@@ -1,0 +1,198 @@
+{
+  "@@locale": "zh",
+  "appName": "内网通",
+  "appTagline": "局域网即时通讯",
+  "tabChats": "会话",
+  "tabDevices": "设备",
+  "tabMe": "我的",
+  "lanDevices": "局域网设备",
+  "unknownDevice": "未知设备",
+  "unknown": "未知",
+  "copy": "复制",
+  "copied": "已复制",
+  "close": "关闭",
+  "share": "分享",
+  "save": "保存",
+  "saveAs": "另存为",
+  "saved": "已保存",
+  "retry": "重试",
+  "online": "在线",
+  "offline": "离线",
+  "file": "文件",
+  "image": "图片",
+  "me": "我",
+  "thisDevice": "本机",
+  "accept": "接收",
+  "decline": "拒绝",
+  "justNow": "刚刚",
+  "minutesAgo": "{count, plural, other{{count} 分钟前}}",
+  "@minutesAgo": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "hoursAgo": "{count, plural, other{{count} 小时前}}",
+  "@hoursAgo": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "daysAgo": "{count, plural, other{{count} 天前}}",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "deviceNotFound": "找不到该设备信息",
+  "noConversations": "暂时没有会话",
+  "noConversationsHint": "发现在线设备后，向他打个招呼吧",
+  "noMessages": "暂无消息",
+  "scanDone": "{count, plural, other{扫描完成，共发现 {count} 台设备}}",
+  "@scanDone": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "subnetSuffix": " · 网段 {cidr}",
+  "@subnetSuffix": {
+    "placeholders": {
+      "cidr": {"type": "String"}
+    }
+  },
+  "onlineCount": "{count, plural, other{{count} 台在线}}",
+  "@onlineCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "noOnlineDevices": "暂无在线设备",
+  "noOnlineDevicesHint": "确保对方已打开应用，并连接到同一网络",
+  "deviceNameLabel": "设备名 {name}",
+  "@deviceNameLabel": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "sectionDeviceInfo": "本机信息",
+  "nickname": "昵称",
+  "tapToSetNickname": "点击设置昵称",
+  "nicknameCleared": "已清除昵称",
+  "nicknameSaved": "昵称已保存",
+  "ipAddress": "IP 地址",
+  "deviceId": "设备 ID",
+  "publicKey": "公钥",
+  "sectionGeneral": "通用设置",
+  "theme": "主题",
+  "language": "语言",
+  "notifications": "消息通知",
+  "discoverable": "允许被局域网发现",
+  "encryptTransfer": "加密传输",
+  "sectionAbout": "关于",
+  "version": "版本号",
+  "privacyPolicy": "隐私政策",
+  "userAgreement": "用户协议",
+  "helpFeedback": "帮助与反馈",
+  "themeSystem": "系统",
+  "themeDark": "深色",
+  "themeLight": "浅色",
+  "localeSystem": "系统",
+  "localeZh": "中文",
+  "localeEn": "English",
+  "profileTitle": "详细资料",
+  "originalName": "原名 {name}",
+  "@originalName": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "remark": "备注",
+  "tapToSetRemark": "点击设置备注",
+  "remarkCleared": "已清除备注",
+  "remarkSaved": "备注已保存",
+  "sendMessage": "发送消息",
+  "offlineLastSeen": "离线 · 最后在线 {time}",
+  "@offlineLastSeen": {
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  "peerAddressInvalid": "对方地址无效，无法发送",
+  "deviceNotReady": "设备信息未就绪，无法发送",
+  "cipherEstablishFailed": "加密通道建立失败",
+  "cipherEstablishingWait": "正在建立加密通道，请稍候",
+  "cannotGetFileName": "无法获取文件名",
+  "sendFileFailed": "发送文件失败：{error}",
+  "@sendFileFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "receiveFailed": "接收失败：{error}",
+  "@receiveFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "waitingPeerAcceptFile": "等待对方接收文件",
+  "pleaseAcceptFileFirst": "请先接收文件",
+  "fileTransferring": "文件正在传输中",
+  "peerDeclinedFile": "对方已拒绝该文件",
+  "fileDeclined": "已拒绝该文件",
+  "fileTransferFailed": "文件传输失败",
+  "localPathUnavailable": "本地文件路径不可用",
+  "localFileMissing": "本地文件不存在或已被移动",
+  "shareFailed": "分享失败",
+  "saveFailed": "保存失败",
+  "today": "今天",
+  "yesterday": "昨天",
+  "weekdayMon": "周一",
+  "weekdayTue": "周二",
+  "weekdayWed": "周三",
+  "weekdayThu": "周四",
+  "weekdayFri": "周五",
+  "weekdaySat": "周六",
+  "weekdaySun": "周日",
+  "cipherReadyTitle": "端到端加密已启用",
+  "cipherReadySubtitle": "请与对方核实公钥是否一致",
+  "cipherEstablishing": "正在建立加密通道…",
+  "cipherFailed": "加密建立失败",
+  "cipherWaiting": "等待加密连接",
+  "startChatWith": "与 {name} 开始对话",
+  "@startChatWith": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "startChatHint": "可发送文字或文件，经局域网直连送达",
+  "waitingPeerAccept": "等待对方接收",
+  "waitingYourAccept": "待你确认接收",
+  "transferring": "正在传输…",
+  "transferDoneTapOpen": "传输完成 · 点击打开",
+  "peerDeclined": "对方已拒绝",
+  "declined": "已拒绝",
+  "transferFailed": "传输失败",
+  "savedLocally": "已保存至本地",
+  "sendFile": "发送文件",
+  "messageHint": "发送消息...",
+  "unknownSize": "未知大小",
+  "unknownFile": "未知文件",
+  "incomingFile": "收到文件",
+  "noAlbumPermission": "没有相册权限",
+  "savedToAlbum": "已保存到相册",
+  "notEnoughSpace": "存储空间不足",
+  "unsupportedImageFormat": "不支持该图片格式",
+  "cannotDisplayImage": "无法显示图片",
+  "cannotOpenPage": "无法打开页面",
+  "errorConnectFailed": "连接建立失败",
+  "errorCipherNotReady": "加密通道未就绪",
+  "errorSendFailed": "消息发送失败",
+  "errorNegotiateSendFailed": "协商消息发送失败",
+  "errorPeerTempKeyInvalid": "对方临时公钥无效",
+  "errorPeerIdentityInvalid": "对方身份签名无效",
+  "errorPeerTempKeyVerifyFailed": "对方临时公钥验签失败",
+  "errorPeerIdentityMismatch": "对方身份与已知设备不符",
+  "errorConfirmCipherEmpty": "密钥确认密文为空",
+  "errorConfirmMismatch": "密钥确认与本地临时公钥不一致",
+  "errorConfirmDecryptFailed": "密钥确认解密失败",
+  "errorNegotiateException": "密钥协商异常"
+}

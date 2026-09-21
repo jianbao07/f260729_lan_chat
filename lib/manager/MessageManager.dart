@@ -79,6 +79,12 @@ class MessageManager {
     await FileTransferManager.offer(file, device);
   }
 
+  static Future<void> resendFile(String transferId, DeviceBean device) async {
+    await FileTransferManager.reoffer(transferId, device);
+  }
+
+  static MessageSendFileBean? sendFileOf(String transferId) => _findSendFile(transferId);
+
   static Future<void> sendAckMessage(String ip, String? messageId) async {
     final ack = CmdAckBean(messageId: messageId);
     final payload = jsonEncode(ack.toJson());
@@ -212,17 +218,48 @@ class MessageManager {
     MessageStore.onChangeMessage(offer);
   }
 
-  static MessageSendFileBean? _findSendFile(String transferId) {
+  static String? localPathOf(String transferId) {
+    String? path;
+    for (final message in _sendFilesOf(transferId)) {
+      final p = message.transferRecord?.localPath;
+      if (p != null && p.isNotEmpty) path = p;
+    }
+    return path;
+  }
+
+  /// 同一 transfer 下除 [keepMessageId] 外，仍处于待接收/传输中的 offer 标为失败。
+  static void failOlderFileOffers(String transferId, String keepMessageId) {
+    for (final message in _sendFilesOf(transferId)) {
+      if (message.messageId == keepMessageId) continue;
+      final state = FileTransferState.fromCode(message.transferRecord?.state);
+      if (state == FileTransferState.success || state == FileTransferState.rejected || state == FileTransferState.failed) {
+        continue;
+      }
+      message.transferRecord ??= FileTransferRecord(transferId: transferId, isSender: message.base?.isSender == true, total: message.totalSize);
+      message.transferRecord!.state = FileTransferState.failed.code;
+      MessageStore.onChangeMessage(message);
+    }
+  }
+
+  static Iterable<MessageSendFileBean> _sendFilesOf(String transferId) sync* {
     final conversationId = transferConversationIds[transferId];
     final candidates = conversationId != null
         ? [MessageStore.historyMessages[conversationId] ?? const <Message>[]]
         : MessageStore.historyMessages.values;
     for (final messages in candidates) {
       for (final message in messages) {
-        if (message is MessageSendFileBean && message.transferId == transferId) return message;
+        if (message is MessageSendFileBean && message.transferId == transferId) yield message;
       }
     }
-    return null;
+  }
+
+  /// 同一 transferId 的最新一条文件 offer。
+  static MessageSendFileBean? _findSendFile(String transferId) {
+    MessageSendFileBean? found;
+    for (final message in _sendFilesOf(transferId)) {
+      found = message;
+    }
+    return found;
   }
 
   static void _addMessage(Message message) {

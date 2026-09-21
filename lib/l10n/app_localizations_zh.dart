@@ -57,6 +57,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get retry => '重试';
 
   @override
+  String get resend => '重新发送';
+
+  @override
   String get online => '在线';
 
   @override

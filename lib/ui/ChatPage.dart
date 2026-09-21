@@ -241,6 +241,21 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  Future<void> _resendFile(String transferId) async {
+    if (_fileActionBusy.contains(transferId)) return;
+    if (!_ensurePeerReady()) return;
+    if (!_ensureCipherReadyForSend()) return;
+    setState(() => _fileActionBusy.add(transferId));
+    try {
+      await MessageManager.resendFile(transferId, widget.device);
+    } catch (e) {
+      if (!mounted) return;
+      showAppToast(context, context.l10n.sendFileFailed('$e'));
+    } finally {
+      if (mounted) setState(() => _fileActionBusy.remove(transferId));
+    }
+  }
+
   Future<void> _onFileTap(FileMessageDisplay file, {required bool mine}) async {
     if (file.isImage) {
       final imagePath = file.localPath;
@@ -493,6 +508,7 @@ class _ChatPageState extends State<ChatPage> {
                           fileActionBusy: msg is FileMessageDisplay && _fileActionBusy.contains(msg.fileMessage.transferId),
                           onAcceptFile: _acceptFile,
                           onRejectFile: _rejectFile,
+                          onResendFile: _resendFile,
                           onFileTap: _onFileTap,
                           onFileLongPress: _onFileLongPress,
                           onAvatarTap: _openAvatarPage,
@@ -707,6 +723,7 @@ class _MessageBubble extends StatelessWidget {
     required this.fileActionBusy,
     required this.onAcceptFile,
     required this.onRejectFile,
+    required this.onResendFile,
     required this.onFileTap,
     required this.onFileLongPress,
     required this.onAvatarTap,
@@ -721,6 +738,7 @@ class _MessageBubble extends StatelessWidget {
   final bool fileActionBusy;
   final ValueChanged<String> onAcceptFile;
   final ValueChanged<String> onRejectFile;
+  final ValueChanged<String> onResendFile;
   final void Function(FileMessageDisplay file, {required bool mine}) onFileTap;
   final void Function(FileMessageDisplay file, {required bool mine}) onFileLongPress;
   final void Function({required bool mine}) onAvatarTap;
@@ -790,6 +808,7 @@ class _MessageBubble extends StatelessWidget {
                               : () => onFileLongPress(message as FileMessageDisplay, mine: mine),
                           onAccept: () => onAcceptFile((message as FileMessageDisplay).fileMessage.transferId!),
                           onReject: () => onRejectFile((message as FileMessageDisplay).fileMessage.transferId!),
+                          onResend: () => onResendFile((message as FileMessageDisplay).fileMessage.transferId!),
                         )
                       : Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -836,6 +855,7 @@ class _FileBubbleBody extends StatelessWidget {
     this.onLongPress,
     required this.onAccept,
     required this.onReject,
+    required this.onResend,
   });
 
   final FileMessageDisplay file;
@@ -845,6 +865,7 @@ class _FileBubbleBody extends StatelessWidget {
   final VoidCallback? onLongPress;
   final VoidCallback onAccept;
   final VoidCallback onReject;
+  final VoidCallback onResend;
 
   static String formatSize(int? bytes) {
     if (bytes == null || bytes < 0) return '';
@@ -909,7 +930,8 @@ class _FileBubbleBody extends StatelessWidget {
 
   Widget _imageBody(BuildContext context) {
     final overlay = file.fileState != null && file.fileState != FileTransferState.success;
-    final transferring = file.fileState == FileTransferState.transferring;
+    final transferring = file.fileState == FileTransferState.transferring || busy;
+    final showResend = mine && file.fileState == FileTransferState.failed && !busy;
     return GestureDetector(
       onTap: onTap,
       child: Stack(
@@ -934,9 +956,28 @@ class _FileBubbleBody extends StatelessWidget {
                           height: 22,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white, value: file.progress),
                         )
-                      : Text(
-                          stateLabel(file.fileState!, context.l10n, mine: mine),
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              stateLabel(file.fileState!, context.l10n, mine: mine),
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                            ),
+                            if (showResend) ...[
+                              const SizedBox(height: 8),
+                              FilledButton(
+                                onPressed: onResend,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: Colors.black87,
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                  visualDensity: VisualDensity.compact,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Text(context.l10n.resend),
+                              ),
+                            ],
+                          ],
                         ),
                 ),
               ),
@@ -955,6 +996,7 @@ class _FileBubbleBody extends StatelessWidget {
         ? '${formatSize(file.current)} / ${formatSize(file.total)}'
         : formatSize(file.totalSize);
     final showActions = !mine && file.fileState == FileTransferState.send && !busy;
+    final showResend = mine && file.fileState == FileTransferState.failed && !busy;
     final showProgress = file.fileState == FileTransferState.transferring || busy;
 
     return Column(
@@ -1011,7 +1053,7 @@ class _FileBubbleBody extends StatelessWidget {
                     backgroundColor: mine ? const Color(0x3315171C) : c.border,
                   ),
                 ),
-                if (showActions) const SizedBox(height: 10),
+                if (showActions || showResend) const SizedBox(height: 10),
               ],
               if (showActions)
                 Row(
@@ -1042,6 +1084,20 @@ class _FileBubbleBody extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+              if (showResend)
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: onResend,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: c.onAccent,
+                      side: BorderSide(color: c.onAccent.withValues(alpha: 0.45)),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    child: Text(context.l10n.resend),
+                  ),
                 ),
               if (!mine && file.fileState == FileTransferState.success && file.localPath != null)
                 Text(context.l10n.savedLocally, style: TextStyle(fontSize: 11.5, color: sub)),

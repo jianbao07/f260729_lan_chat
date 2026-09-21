@@ -194,6 +194,12 @@ abstract class AppLocalizations {
   /// **'重试'**
   String get retry;
 
+  /// No description provided for @resend.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新发送'**
+  String get resend;
+
   /// No description provided for @online.
   ///
   /// In zh, this message translates to:

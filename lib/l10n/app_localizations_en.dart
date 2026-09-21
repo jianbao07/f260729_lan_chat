@@ -57,6 +57,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get retry => 'Retry';
 
   @override
+  String get resend => 'Resend';
+
+  @override
   String get online => 'Online';
 
   @override

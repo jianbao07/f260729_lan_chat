@@ -6,6 +6,7 @@ import 'package:yf_code/bean/MessageBaseBean.dart';
 import 'package:yf_code/bean/ConversationIndex.dart';
 import 'package:yf_code/bean/MessageSendFileBean.dart';
 import 'package:yf_code/bean/MessageTextBean.dart';
+import 'package:yf_code/enum/FileTransferState.dart';
 import 'package:yf_code/enum/MessageType.dart';
 import 'package:yf_code/model/ConversationModel.dart';
 import 'package:yf_code/model/MessageModel.dart';
@@ -140,14 +141,19 @@ class MessageStore {
       return [];
     }
     final loaded = <Message>[];
+    var interrupted = false;
     for (final record in records) {
       final message = Message.fromJson(record);
       if (message == null) continue;
       message.pageName ??= pageName;
       if (messages.any((m) => m.messageId == message.messageId)) continue;
+      if (_failInterruptedFileTransfer(message)) interrupted = true;
       loaded.add(message);
     }
     messages.insertAll(0, loaded);
+    if (interrupted) {
+      await FileUtils.writeJsonAtomic(pageFile, _pageRecordsFromMemory(conversationId, pageName));
+    }
     return loaded;
   }
 
@@ -294,13 +300,30 @@ class MessageStore {
       return;
     }
     final messages = historyMessages.putIfAbsent(conversationId, () => []);
+    var interrupted = false;
     for (final record in records) {
       final message = Message.fromJson(record);
       if (message == null) continue;
       message.pageName ??= pageName;
       if (messages.any((m) => m.messageId == message.messageId)) continue;
+      if (_failInterruptedFileTransfer(message)) interrupted = true;
       messages.add(message);
     }
+    if (interrupted) {
+      await FileUtils.writeJsonAtomic(pageFile, _pageRecordsFromMemory(conversationId, pageName));
+    }
+  }
+
+  /// 磁盘里读到的未完成文件传输已中断，标为失败。
+  static bool _failInterruptedFileTransfer(Message message) {
+    if (message is! MessageSendFileBean) return false;
+    final record = message.transferRecord;
+    if (record == null) return false;
+    final state = FileTransferState.fromCode(record.state);
+    if (state != FileTransferState.transferring && state != FileTransferState.send) return false;
+    record.state = FileTransferState.failed.code;
+    iLog('磁盘加载中断的文件传输，标记失败 transferId=${message.transferId} messageId=${message.messageId}');
+    return true;
   }
 
   static Future<void> _enqueueWrite(String conversationId, Future<void> Function() action) {

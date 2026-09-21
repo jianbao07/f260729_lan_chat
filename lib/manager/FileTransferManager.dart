@@ -58,9 +58,45 @@ class FileTransferManager {
 
   /// 发送方：起 TCP 监听并发送 [MessageSendFileBean]。
   static Future<void> offer(File file, DeviceBean device) async {
-    final transferId = _newTransferId();
+    await _startSend(file, device, transferId: _newTransferId());
+  }
+
+  /// 发送失败后按原 [transferId] 重新发起：新 messageId，复用原本地路径与文件元数据。
+  static Future<void> reoffer(String transferId, DeviceBean device) async {
+    final latestState = FileTransferState.fromCode(MessageManager.sendFileOf(transferId)?.transferRecord?.state);
+    if (latestState == FileTransferState.send || latestState == FileTransferState.transferring) {
+      iLog("reoffer 忽略：已有进行中的发送 transferId=$transferId");
+      return;
+    }
+
+    final leftover = _sessions[transferId];
+    if (leftover != null) {
+      if (leftover.state == FileTransferState.transferring) {
+        iLog("reoffer 忽略：正在传输 transferId=$transferId");
+        return;
+      }
+      leftover.replyTimeout?.cancel();
+      leftover.replyTimeout = null;
+      await leftover.closeServer();
+      _removeSession(transferId);
+    }
+
+    final original = MessageManager.sendFileOf(transferId);
+    final path = original?.transferRecord?.localPath ?? MessageManager.localPathOf(transferId);
+    if (original == null || path == null || path.isEmpty) {
+      throw StateError('找不到原始文件记录 transferId=$transferId');
+    }
+    final file = File(path);
+    if (!await file.exists()) {
+      throw StateError('本地文件不存在 path=$path');
+    }
+    await _startSend(file, device, transferId: transferId, fileMeta: original);
+  }
+
+  static Future<void> _startSend(File file, DeviceBean device, {required String transferId, MessageSendFileBean? fileMeta}) async {
     final ip = device.ipAddress ?? '';
-    final encrypted = AppSettings.instance.encryptOn && KeyNegotiator.isReady(ip);
+    final encrypted = fileMeta != null ? fileMeta.encrypted : (AppSettings.instance.encryptOn && KeyNegotiator.isReady(ip));
+    final localPath = file.path;
     final tcp = FileByteChannel(ip, encrypted: encrypted);
     final server = await tcp.startSendFile(
       file,
@@ -68,20 +104,22 @@ class FileTransferManager {
         _notifyProgress(transferId, current, total);
       },
       onSendFailed: (errorMsg) {
+        _sessions[transferId]?.replyTimeout?.cancel();
+        _removeSession(transferId);
         MessageManager.updateFile(transferId, state: FileTransferState.failed, errorMsg: errorMsg);
       },
     );
-    final name = FileUtils.fileNameOf(file);
-    final mimeType = FileUtils.mimeTypeOf(file);
-    final totalSize = await file.length();
+    final name = fileMeta?.name ?? FileUtils.fileNameOf(file);
+    final mimeType = fileMeta?.mimeType ?? FileUtils.mimeTypeOf(file);
+    final totalSize = fileMeta?.totalSize ?? await file.length();
     final port = server.port;
-    final localPath = file.path;
 
     final bean = MessageSendFileBean(
       transferId: transferId,
       mimeType: mimeType,
       name: name,
       totalSize: totalSize,
+      sha256: fileMeta?.sha256,
       port: port,
       encrypted: encrypted,
     );
@@ -94,6 +132,7 @@ class FileTransferManager {
       name: name,
       mimeType: mimeType,
       totalSize: totalSize,
+      sha256: fileMeta?.sha256,
       port: port,
       localPath: localPath,
       offerMessage: bean,
@@ -107,21 +146,36 @@ class FileTransferManager {
     });
 
     await MessageManager.sendMessage(bean, device);
+    MessageManager.failOlderFileOffers(transferId, bean.messageId);
     MessageManager.updateFile(transferId, state: FileTransferState.send, localPath: localPath);
-    iLog("已发送文件 offer transferId=$transferId port=$port encrypted=$encrypted");
+    iLog("已发送文件 offer transferId=$transferId messageId=${bean.messageId} port=$port encrypted=$encrypted resend=${fileMeta != null}");
   }
 
-  /// 接收方：收到 [MessageSendFileBean]。
+  /// 接收方：收到 [MessageSendFileBean]。同一 transferId 的重发是新消息，需重新同意接收；本地路径沿用原记录。
   static void onOffer(MessageSendFileBean offer, String ip) {
     final transferId = offer.transferId;
     if (transferId == null || transferId.isEmpty) {
       iLog("忽略无效文件 offer：缺少 transfer_id");
       return;
     }
-    if (_sessions.containsKey(transferId)) {
-      iLog("忽略重复文件 offer transferId=$transferId");
+    final existing = _sessions[transferId];
+    if (existing != null && existing.state == FileTransferState.transferring) {
+      iLog("忽略传输中的重复文件 offer transferId=$transferId");
       return;
     }
+    if (existing != null && existing.offerMessage?.messageId == offer.messageId) {
+      existing.port = offer.port;
+      existing.offerMessage = offer;
+      iLog("忽略同 messageId 的文件 offer 重试 transferId=$transferId");
+      return;
+    }
+    final hadPendingSession = existing != null;
+    if (existing != null) {
+      _removeSession(transferId);
+    }
+
+    MessageManager.failOlderFileOffers(transferId, offer.messageId);
+    final previousPath = MessageManager.localPathOf(transferId);
 
     final session = FileTransferSession(
       transferId: transferId,
@@ -133,10 +187,15 @@ class FileTransferManager {
       totalSize: offer.totalSize,
       sha256: offer.sha256,
       port: offer.port,
+      localPath: previousPath,
       offerMessage: offer,
     );
     _sessions[transferId] = session;
-    _showReceiveDialog(transferId);
+    MessageManager.updateFile(transferId, state: FileTransferState.send, localPath: previousPath);
+    if (!hadPendingSession) {
+      _showReceiveDialog(transferId);
+    }
+    iLog("收到文件 offer transferId=$transferId messageId=${offer.messageId} port=${offer.port} reusePath=${previousPath != null}");
   }
 
   static void _showReceiveDialog(String transferId) {
@@ -234,16 +293,17 @@ class FileTransferManager {
     }
 
     session.state = FileTransferState.transferring;
-    MessageManager.updateFile(transferId, state: FileTransferState.transferring);
     final reply = MessageReplySendFileBean.buildAccept(offer);
     await MessageManager.sendMessage(reply, session.peer);
 
     final path = savePath ??
+        session.localPath ??
         await AppFileStore.generateDownloadPath(
           transferId: transferId,
           name: session.name,
         );
     session.localPath = path;
+    MessageManager.updateFile(transferId, state: FileTransferState.transferring, localPath: path);
 
     final tcp = FileByteChannel(session.peer.ipAddress ?? '', encrypted: offer.encrypted);
     try {

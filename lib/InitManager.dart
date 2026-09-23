@@ -4,6 +4,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:yf_code/manager/MessageStore.dart';
 import 'package:yf_code/manager/OnlineDeviceManager.dart';
+import 'package:yf_code/manager/ShareIntentManager.dart';
 import 'package:yf_code/model/AppSettings.dart';
 import 'package:yf_code/channel/TextChannel.dart';
 import 'package:yf_code/cipher/KeyNegotiator.dart';
@@ -38,6 +39,7 @@ class InitManager{
     OnlineDeviceManager.listenerBeat();
     TextChannel.init();
     KeyNegotiator.init();
+    ShareIntentManager.init();
     await MessageStore.init();
   }
 

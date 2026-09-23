@@ -14,6 +14,8 @@
   "share": "分享",
   "save": "保存",
   "saveAs": "另存为",
+  "showInFolder": "在文件夹中显示",
+  "showInFolderFailed": "无法打开文件夹",
   "saved": "已保存",
   "retry": "重试",
   "resend": "重新发送",
@@ -195,5 +197,18 @@
   "errorConfirmCipherEmpty": "密钥确认密文为空",
   "errorConfirmMismatch": "密钥确认与本地临时公钥不一致",
   "errorConfirmDecryptFailed": "密钥确认解密失败",
-  "errorNegotiateException": "密钥协商异常"
+  "errorNegotiateException": "密钥协商异常",
+  "shareSendTitle": "发送给",
+  "shareSendHint": "选择要发送的设备",
+  "shareEncryptHint": "已开启加密，发送前将先与对方协商密钥",
+  "shareSending": "正在发送…",
+  "shareNegotiating": "正在协商加密…",
+  "shareSent": "已发送",
+  "shareNothing": "没有可发送的内容",
+  "shareSendFailed": "发送失败：{error}",
+  "@shareSendFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  }
 }

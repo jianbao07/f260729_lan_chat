@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:yf_code/l10n/l10n.dart';
+import 'package:yf_code/manager/ShareIntentManager.dart';
 import 'package:yf_code/theme/AppColors.dart';
 import 'package:yf_code/ui/ConversationPage.dart';
 import 'package:yf_code/ui/MePage.dart';
@@ -15,6 +16,12 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    ShareIntentManager.markHomeReady();
+  }
 
   @override
   Widget build(BuildContext context) {

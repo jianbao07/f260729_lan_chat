@@ -35,6 +35,8 @@ import 'package:yf_code/ui/widgets/PeerAvatar.dart';
 import 'package:yf_code/utils/log.dart';
 import 'package:yf_code/utils/page.dart';
 
+bool get _isDesktopPlatform => Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key, required this.device});
 
@@ -303,12 +305,11 @@ class _ChatPageState extends State<ChatPage> {
     if (result.type != ResultType.done) showAppToast(context, result.message);
   }
 
-  Future<void> _onFileLongPress(FileMessageDisplay file, {required bool mine}) async {
-    if (file.isImage) return;
+  Future<void> _onFileContext(FileMessageDisplay file, {required bool mine, Offset? position}) async {
     final path = file.localPath;
     if (path != null && path.isNotEmpty && await File(path).exists()) {
       if (!mounted) return;
-      await _showFileActions(file, path);
+      await _showFileActions(file, path, position: position);
       return;
     }
     if (!mounted) return;
@@ -332,7 +333,11 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> _showFileActions(FileMessageDisplay file, String path) async {
+  Future<void> _showFileActions(FileMessageDisplay file, String path, {Offset? position}) async {
+    if (_isDesktopPlatform && position != null) {
+      await _showFileContextMenu(file, path, position);
+      return;
+    }
     final c = context.colors;
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -368,8 +373,85 @@ class _ChatPageState extends State<ChatPage> {
       },
     );
     if (!mounted || action == null) return;
+    await _runFileAction(action, file, path);
+  }
+
+  Future<void> _showFileContextMenu(FileMessageDisplay file, String path, Offset globalPosition) async {
+    if (!mounted) return;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+    final c = context.colors;
+    final local = overlay.globalToLocal(globalPosition);
+    final action = await showMenu<String>(
+      context: context,
+      color: c.surface,
+      elevation: 8,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: c.border),
+      ),
+      position: RelativeRect.fromLTRB(local.dx, local.dy, overlay.size.width - local.dx, overlay.size.height - local.dy),
+      items: [
+        PopupMenuItem(
+          value: 'share',
+          child: Row(
+            children: [
+              Icon(Icons.ios_share_rounded, size: 18, color: c.textPrimary),
+              const SizedBox(width: 10),
+              Text(context.l10n.share, style: TextStyle(fontWeight: FontWeight.w600, color: c.textPrimary)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'save',
+          child: Row(
+            children: [
+              Icon(Icons.save_alt_rounded, size: 18, color: c.textPrimary),
+              const SizedBox(width: 10),
+              Text(context.l10n.saveAs, style: TextStyle(fontWeight: FontWeight.w600, color: c.textPrimary)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'folder',
+          child: Row(
+            children: [
+              Icon(Icons.folder_open_rounded, size: 18, color: c.textPrimary),
+              const SizedBox(width: 10),
+              Text(context.l10n.showInFolder, style: TextStyle(fontWeight: FontWeight.w600, color: c.textPrimary)),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (!mounted || action == null) return;
+    await _runFileAction(action, file, path);
+  }
+
+  Future<void> _runFileAction(String action, FileMessageDisplay file, String path) async {
     if (action == 'share') await _shareLocalFile(path, name: file.name, mimeType: file.mimeType);
     if (action == 'save') await _saveLocalFileAs(path, name: file.name);
+    if (action == 'folder') await _showInFolder(path);
+  }
+
+  Future<void> _showInFolder(String path) async {
+    try {
+      final file = File(path);
+      if (!await file.exists()) {
+        if (mounted) showAppToast(context, context.l10n.localFileMissing);
+        return;
+      }
+      final folder = file.parent.absolute.path;
+      if (Platform.isWindows) {
+        await Process.start('explorer', [folder.replaceAll('/', r'\')]);
+      } else if (Platform.isMacOS) {
+        await Process.start('open', [folder]);
+      } else {
+        await Process.start('xdg-open', [folder]);
+      }
+    } catch (_) {
+      if (mounted) showAppToast(context, context.l10n.showInFolderFailed);
+    }
   }
 
   Future<void> _shareLocalFile(String path, {String? name, String? mimeType}) async {
@@ -510,7 +592,7 @@ class _ChatPageState extends State<ChatPage> {
                           onRejectFile: _rejectFile,
                           onResendFile: _resendFile,
                           onFileTap: _onFileTap,
-                          onFileLongPress: _onFileLongPress,
+                          onFileContext: _onFileContext,
                           onAvatarTap: _openAvatarPage,
                         );
                       },
@@ -725,7 +807,7 @@ class _MessageBubble extends StatelessWidget {
     required this.onRejectFile,
     required this.onResendFile,
     required this.onFileTap,
-    required this.onFileLongPress,
+    required this.onFileContext,
     required this.onAvatarTap,
   });
 
@@ -740,7 +822,7 @@ class _MessageBubble extends StatelessWidget {
   final ValueChanged<String> onRejectFile;
   final ValueChanged<String> onResendFile;
   final void Function(FileMessageDisplay file, {required bool mine}) onFileTap;
-  final void Function(FileMessageDisplay file, {required bool mine}) onFileLongPress;
+  final void Function(FileMessageDisplay file, {required bool mine, Offset? position}) onFileContext;
   final void Function({required bool mine}) onAvatarTap;
 
   bool get _isMine => message.baseMessage?.base?.fromDeviceId == myDeviceId;
@@ -803,9 +885,12 @@ class _MessageBubble extends StatelessWidget {
                           mine: mine,
                           busy: fileActionBusy,
                           onTap: () => onFileTap(message as FileMessageDisplay, mine: mine),
-                          onLongPress: (message as FileMessageDisplay).isImage
+                          onLongPress: _isDesktopPlatform || (message as FileMessageDisplay).isImage
                               ? null
-                              : () => onFileLongPress(message as FileMessageDisplay, mine: mine),
+                              : () => onFileContext(message as FileMessageDisplay, mine: mine),
+                          onSecondaryTapUp: _isDesktopPlatform
+                              ? (details) => onFileContext(message as FileMessageDisplay, mine: mine, position: details.globalPosition)
+                              : null,
                           onAccept: () => onAcceptFile((message as FileMessageDisplay).fileMessage.transferId!),
                           onReject: () => onRejectFile((message as FileMessageDisplay).fileMessage.transferId!),
                           onResend: () => onResendFile((message as FileMessageDisplay).fileMessage.transferId!),
@@ -853,6 +938,7 @@ class _FileBubbleBody extends StatelessWidget {
     required this.busy,
     required this.onTap,
     this.onLongPress,
+    this.onSecondaryTapUp,
     required this.onAccept,
     required this.onReject,
     required this.onResend,
@@ -863,6 +949,7 @@ class _FileBubbleBody extends StatelessWidget {
   final bool busy;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
+  final GestureTapUpCallback? onSecondaryTapUp;
   final VoidCallback onAccept;
   final VoidCallback onReject;
   final VoidCallback onResend;
@@ -934,6 +1021,7 @@ class _FileBubbleBody extends StatelessWidget {
     final showResend = mine && file.fileState == FileTransferState.failed && !busy;
     return GestureDetector(
       onTap: onTap,
+      onSecondaryTapUp: onSecondaryTapUp,
       child: Stack(
         alignment: Alignment.center,
         children: [
@@ -1008,6 +1096,7 @@ class _FileBubbleBody extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             onLongPress: onLongPress,
+            onSecondaryTapUp: onSecondaryTapUp,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
               child: Row(

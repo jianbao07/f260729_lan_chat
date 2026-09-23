@@ -14,6 +14,8 @@
   "share": "Share",
   "save": "Save",
   "saveAs": "Save as",
+  "showInFolder": "Show in folder",
+  "showInFolderFailed": "Could not open folder",
   "saved": "Saved",
   "retry": "Retry",
   "resend": "Resend",
@@ -135,5 +137,18 @@
   "errorConfirmCipherEmpty": "Key confirmation ciphertext is empty",
   "errorConfirmMismatch": "Key confirmation does not match the local temporary public key",
   "errorConfirmDecryptFailed": "Failed to decrypt key confirmation",
-  "errorNegotiateException": "Key negotiation error"
+  "errorNegotiateException": "Key negotiation error",
+  "shareSendTitle": "Send to",
+  "shareSendHint": "Choose a device to send to",
+  "shareEncryptHint": "Encryption is on. A key handshake will run before sending",
+  "shareSending": "Sending…",
+  "shareNegotiating": "Negotiating encryption…",
+  "shareSent": "Sent",
+  "shareNothing": "Nothing to send",
+  "shareSendFailed": "Failed to send: {error}",
+  "@shareSendFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  }
 }

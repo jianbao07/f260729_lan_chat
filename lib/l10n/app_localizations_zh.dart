@@ -51,6 +51,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get saveAs => '另存为';
 
   @override
+  String get showInFolder => '在文件夹中显示';
+
+  @override
+  String get showInFolderFailed => '无法打开文件夹';
+
+  @override
   String get saved => '已保存';
 
   @override
@@ -464,4 +470,30 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get errorNegotiateException => '密钥协商异常';
+
+  @override
+  String get shareSendTitle => '发送给';
+
+  @override
+  String get shareSendHint => '选择要发送的设备';
+
+  @override
+  String get shareEncryptHint => '已开启加密，发送前将先与对方协商密钥';
+
+  @override
+  String get shareSending => '正在发送…';
+
+  @override
+  String get shareNegotiating => '正在协商加密…';
+
+  @override
+  String get shareSent => '已发送';
+
+  @override
+  String get shareNothing => '没有可发送的内容';
+
+  @override
+  String shareSendFailed(String error) {
+    return '发送失败：$error';
+  }
 }

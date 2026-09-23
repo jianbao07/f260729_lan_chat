@@ -59,6 +59,28 @@ class KeyNegotiator {
     _enqueue(ip, () => _start(ip));
   }
 
+  /// 开启加密时等待协商完成。已就绪立即返回 true；失败或超时返回 false。
+  static Future<bool> ensureReady(String ip, {Duration timeout = const Duration(seconds: 20)}) async {
+    if (isReady(ip)) return true;
+    final done = Completer<bool>();
+    final sub = sessionEvents.listen((e) {
+      if (e.ip != ip || done.isCompleted) return;
+      if (e.state == CipherSessionState.ready) done.complete(true);
+      if (e.state == CipherSessionState.failed) done.complete(false);
+    });
+    start(ip);
+    if (isReady(ip) && !done.isCompleted) done.complete(true);
+    final timer = Timer(timeout, () {
+      if (!done.isCompleted) done.complete(isReady(ip));
+    });
+    try {
+      return await done.future;
+    } finally {
+      timer.cancel();
+      await sub.cancel();
+    }
+  }
+
   static void onTempPublicKey(CmdTempPublicKeyBean msg, String ip) {
     _enqueue(ip, () => _onTempPublicKey(msg, ip));
   }

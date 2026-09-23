@@ -182,6 +182,18 @@ abstract class AppLocalizations {
   /// **'另存为'**
   String get saveAs;
 
+  /// No description provided for @showInFolder.
+  ///
+  /// In zh, this message translates to:
+  /// **'在文件夹中显示'**
+  String get showInFolder;
+
+  /// No description provided for @showInFolderFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法打开文件夹'**
+  String get showInFolderFailed;
+
   /// No description provided for @saved.
   ///
   /// In zh, this message translates to:
@@ -913,6 +925,54 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'密钥协商异常'**
   String get errorNegotiateException;
+
+  /// No description provided for @shareSendTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送给'**
+  String get shareSendTitle;
+
+  /// No description provided for @shareSendHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择要发送的设备'**
+  String get shareSendHint;
+
+  /// No description provided for @shareEncryptHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'已开启加密，发送前将先与对方协商密钥'**
+  String get shareEncryptHint;
+
+  /// No description provided for @shareSending.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在发送…'**
+  String get shareSending;
+
+  /// No description provided for @shareNegotiating.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在协商加密…'**
+  String get shareNegotiating;
+
+  /// No description provided for @shareSent.
+  ///
+  /// In zh, this message translates to:
+  /// **'已发送'**
+  String get shareSent;
+
+  /// No description provided for @shareNothing.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可发送的内容'**
+  String get shareNothing;
+
+  /// No description provided for @shareSendFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送失败：{error}'**
+  String shareSendFailed(String error);
 }
 
 class _AppLocalizationsDelegate

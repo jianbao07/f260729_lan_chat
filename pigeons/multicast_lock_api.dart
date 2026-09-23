@@ -5,7 +5,10 @@ import 'package:pigeon/pigeon.dart';
     dartOut: 'lib/pigeon/multicast_lock_api.g.dart',
     kotlinOut:
         'android/app/src/main/kotlin/com/yf/f260729_lan_chat/pigeon/MulticastLockApi.g.kt',
-    kotlinOptions: KotlinOptions(package: 'com.yf.f260729_lan_chat.pigeon'),
+    kotlinOptions: KotlinOptions(
+      package: 'com.yf.f260729_lan_chat.pigeon',
+      includeErrorClass: true,
+    ),
     dartPackageName: 'yf_code',
   ),
 )

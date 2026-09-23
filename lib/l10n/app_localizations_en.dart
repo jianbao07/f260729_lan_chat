@@ -51,6 +51,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get saveAs => 'Save as';
 
   @override
+  String get showInFolder => 'Show in folder';
+
+  @override
+  String get showInFolderFailed => 'Could not open folder';
+
+  @override
   String get saved => 'Saved';
 
   @override
@@ -476,4 +482,31 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get errorNegotiateException => 'Key negotiation error';
+
+  @override
+  String get shareSendTitle => 'Send to';
+
+  @override
+  String get shareSendHint => 'Choose a device to send to';
+
+  @override
+  String get shareEncryptHint =>
+      'Encryption is on. A key handshake will run before sending';
+
+  @override
+  String get shareSending => 'Sending…';
+
+  @override
+  String get shareNegotiating => 'Negotiating encryption…';
+
+  @override
+  String get shareSent => 'Sent';
+
+  @override
+  String get shareNothing => 'Nothing to send';
+
+  @override
+  String shareSendFailed(String error) {
+    return 'Failed to send: $error';
+  }
 }

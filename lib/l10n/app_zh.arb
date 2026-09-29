@@ -157,6 +157,8 @@
   "weekdaySun": "周日",
   "cipherReadyTitle": "端到端加密已启用",
   "cipherReadySubtitle": "请与对方核实公钥是否一致",
+  "publicKeyChangedTitle": "对方公钥已变化",
+  "publicKeyChangedBody": "请与对方核对这些公钥记录是否一致",
   "cipherEstablishing": "正在建立加密通道…",
   "cipherFailed": "加密建立失败",
   "cipherWaiting": "等待加密连接",

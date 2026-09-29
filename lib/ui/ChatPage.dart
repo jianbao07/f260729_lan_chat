@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
@@ -18,6 +19,7 @@ import 'package:yf_code/manager/FileTransferManager.dart';
 import 'package:yf_code/manager/MessageStore.dart';
 import 'package:yf_code/manager/MessageManager.dart';
 import 'package:yf_code/cipher/KeyNegotiator.dart';
+import 'package:yf_code/cipher/PublicKeyChangeLog.dart';
 import 'package:yf_code/enum/CipherSessionState.dart';
 import 'package:yf_code/l10n/l10n.dart';
 import 'package:yf_code/model/AppSettings.dart';
@@ -87,6 +89,71 @@ class _ChatPageState extends State<ChatPage> {
     _cipherError = KeyNegotiator.errorOf(_peerIp);
     _cipherSub = KeyNegotiator.sessionEvents.listen(_onCipherSession);
     _maybeStartCipher();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _promptPublicKeyChanges();
+    });
+  }
+
+  void _promptPublicKeyChanges() {
+    final records = PublicKeyChangeLog.consume(_peerDeviceId);
+    if (!mounted || records.isEmpty) return;
+    final c = context.colors;
+    final l10n = context.l10n;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: c.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: c.border)),
+          title: Text(l10n.publicKeyChangedTitle, style: TextStyle(fontWeight: FontWeight.w700, color: c.textPrimary)),
+          content: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.5),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(l10n.publicKeyChangedBody, style: TextStyle(fontSize: 13.5, height: 1.45, color: c.textSecondary)),
+                  for (var i = 0; i < records.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _formatPublicKeyTime(records[i].timestampUtc),
+                            style: TextStyle(fontSize: 12, color: c.textTertiary),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            records[i].publicKey.split('').join('\u200B'),
+                            style: TextStyle(fontFamily: kMonoFont, fontSize: 12.5, height: 1.45, color: c.textPrimary),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              style: FilledButton.styleFrom(backgroundColor: c.accent, foregroundColor: c.onAccent),
+              child: Text(l10n.close),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _formatPublicKeyTime(int utcMs) {
+    final local = DateTime.fromMillisecondsSinceEpoch(utcMs, isUtc: true).toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${local.year}-${two(local.month)}-${two(local.day)} ${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
   }
 
   void _onCipherSession(CipherSessionEvent e) {
@@ -839,13 +906,6 @@ class _MessageBubble extends StatelessWidget {
 
   String get _text => message is TextMessageDisplay ? ((message as TextMessageDisplay).textMessage.text ?? '') : '';
 
-  Future<void> _copyText(BuildContext context) async {
-    final text = _text;
-    if (text.isEmpty) return;
-    await Clipboard.setData(ClipboardData(text: text));
-    if (context.mounted) showAppToast(context, context.l10n.copied);
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -895,14 +955,11 @@ class _MessageBubble extends StatelessWidget {
                           onReject: () => onRejectFile((message as FileMessageDisplay).fileMessage.transferId!),
                           onResend: () => onResendFile((message as FileMessageDisplay).fileMessage.transferId!),
                         )
-                      : Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                          child: SelectableText(
-                            _text,
-                            onTap: () => _copyText(context),
-                            cursorColor: mine ? c.onAccent : c.accent,
-                            style: TextStyle(fontSize: 14, height: 1.45, color: mine ? c.onAccent : c.textPrimary),
-                          ),
+                      : _MessageText(
+                          text: _text,
+                          cursorColor: mine ? c.onAccent : c.accent,
+                          selectionColor: mine ? Color.alphaBlend(const Color(0x4D000000), c.accent) : null,
+                          style: TextStyle(fontSize: 14, height: 1.45, color: mine ? c.onAccent : c.textPrimary),
                         ),
                 ),
                 const SizedBox(height: 3),
@@ -927,6 +984,112 @@ class _MessageBubble extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _MessageText extends StatefulWidget {
+  const _MessageText({required this.text, required this.style, required this.cursorColor, this.selectionColor});
+
+  final String text;
+  final TextStyle style;
+  final Color cursorColor;
+  final Color? selectionColor;
+
+  @override
+  State<_MessageText> createState() => _MessageTextState();
+}
+
+class _MessageTextState extends State<_MessageText> {
+  Offset? _secondaryDown;
+  String? _selectedText;
+
+  @override
+  void didUpdateWidget(_MessageText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) _selectedText = null;
+  }
+
+  void _onSelectionChanged(TextSelection selection, SelectionChangedCause? cause) {
+    final text = widget.text;
+    if (!selection.isValid || selection.isCollapsed || selection.start < 0 || selection.end > text.length) {
+      _selectedText = null;
+      return;
+    }
+    _selectedText = selection.textInside(text);
+  }
+
+  Future<void> _copy([String? text]) async {
+    final value = (text == null || text.isEmpty) ? widget.text : text;
+    if (value.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: value));
+    if (mounted) showAppToast(context, context.l10n.copied);
+  }
+
+  Future<void> _showCopyMenu(Offset globalPosition, String? selected) async {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+    final c = context.colors;
+    final local = overlay.globalToLocal(globalPosition);
+    final action = await showMenu<String>(
+      context: context,
+      color: c.surface,
+      elevation: 8,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: c.border)),
+      position: RelativeRect.fromLTRB(local.dx, local.dy, overlay.size.width - local.dx, overlay.size.height - local.dy),
+      items: [
+        PopupMenuItem(
+          value: 'copy',
+          child: Row(
+            children: [
+              Icon(Icons.copy_outlined, size: 18, color: c.textPrimary),
+              const SizedBox(width: 10),
+              Text(context.l10n.copy, style: TextStyle(fontWeight: FontWeight.w600, color: c.textPrimary)),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (!mounted || action != 'copy') return;
+    await _copy(selected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = SelectableText(
+      widget.text,
+      onTap: _isDesktopPlatform ? null : () => _copy(),
+      onSelectionChanged: _isDesktopPlatform ? _onSelectionChanged : null,
+      cursorColor: widget.cursorColor,
+      selectionColor: widget.selectionColor,
+      style: widget.style,
+      contextMenuBuilder: (menuContext, state) {
+        if (!_isDesktopPlatform) return AdaptiveTextSelectionToolbar.editableText(editableTextState: state);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (state.mounted) state.hideToolbar();
+        });
+        return const SizedBox.shrink();
+      },
+    );
+    final body = Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9), child: text);
+    if (!_isDesktopPlatform) return body;
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (event) {
+        if ((event.buttons & kSecondaryMouseButton) != 0) {
+          _secondaryDown = event.position;
+        } else {
+          _secondaryDown = null;
+        }
+      },
+      onPointerUp: (event) {
+        final position = _secondaryDown;
+        final selected = _selectedText;
+        _secondaryDown = null;
+        if (position != null) _showCopyMenu(position, selected);
+      },
+      onPointerCancel: (_) => _secondaryDown = null,
+      child: body,
     );
   }
 }

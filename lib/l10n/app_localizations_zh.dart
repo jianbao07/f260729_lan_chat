@@ -362,6 +362,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cipherReadySubtitle => '请与对方核实公钥是否一致';
 
   @override
+  String get publicKeyChangedTitle => '对方公钥已变化';
+
+  @override
+  String get publicKeyChangedBody => '请与对方核对这些公钥记录是否一致';
+
+  @override
   String get cipherEstablishing => '正在建立加密通道…';
 
   @override

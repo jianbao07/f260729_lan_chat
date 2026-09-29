@@ -102,6 +102,8 @@
   "weekdaySun": "Sun",
   "cipherReadyTitle": "End-to-end encryption is on",
   "cipherReadySubtitle": "Verify the public key with the other person",
+  "publicKeyChangedTitle": "Public key changed",
+  "publicKeyChangedBody": "Verify these public key records with the other person",
   "cipherEstablishing": "Establishing encryption…",
   "cipherFailed": "Encryption failed",
   "cipherWaiting": "Waiting for encryption",

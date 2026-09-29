@@ -710,6 +710,18 @@ abstract class AppLocalizations {
   /// **'请与对方核实公钥是否一致'**
   String get cipherReadySubtitle;
 
+  /// No description provided for @publicKeyChangedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'对方公钥已变化'**
+  String get publicKeyChangedTitle;
+
+  /// No description provided for @publicKeyChangedBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'请与对方核对这些公钥记录是否一致'**
+  String get publicKeyChangedBody;
+
   /// No description provided for @cipherEstablishing.
   ///
   /// In zh, this message translates to:

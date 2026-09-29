@@ -369,6 +369,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Verify the public key with the other person';
 
   @override
+  String get publicKeyChangedTitle => 'Public key changed';
+
+  @override
+  String get publicKeyChangedBody =>
+      'Verify these public key records with the other person';
+
+  @override
   String get cipherEstablishing => 'Establishing encryption…';
 
   @override

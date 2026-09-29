@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:yf_code/cipher/Ed25519Key.dart';
+import 'package:yf_code/cipher/PublicKeyChangeLog.dart';
 import 'package:yf_code/enum/RawMessageType.dart';
 import 'package:yf_code/bean/CmdBeatBean.dart';
 import 'package:yf_code/bean/DeviceBean.dart';
@@ -36,6 +37,7 @@ class OnlineDeviceManager {
       iLog("${ip}:设备id为空");
       return;
     }
+    PublicKeyChangeLog.observe(deviceId, b.publicKey, b.timestampUtc?.toInt());
     final d=_onlineDeviceMap[deviceId];
     final device=d==null
       ? DeviceBean(

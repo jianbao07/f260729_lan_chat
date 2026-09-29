@@ -14,7 +14,7 @@ class AppSettings extends ChangeNotifier {
   String nickname = '';
   bool notifOn = true;
   bool discoverable = true;
-  bool encryptOn = true;
+  bool encryptOn = false;
   Map<String, String> remarks = {};
 
   ThemeMode get themeMode {
@@ -74,7 +74,7 @@ class AppSettings extends ChangeNotifier {
       nickname = (json['nickname'] as String?) ?? '';
       notifOn = json['notifOn'] != false;
       discoverable = json['discoverable'] != false;
-      encryptOn = json['encryptOn'] != false;
+      encryptOn = json['encryptOn'] == true;
       final raw = json['remarks'];
       if (raw is Map) {
         remarks = raw.map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''));
